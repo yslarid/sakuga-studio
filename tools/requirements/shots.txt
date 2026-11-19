@@ -1,0 +1,5 @@
+-r tracking.txt
+pillow
+torch
+torchvision
+transformers>=5,<6

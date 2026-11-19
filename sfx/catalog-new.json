@@ -1,0 +1,383 @@
+{
+  "packs": [
+    {
+      "id": "mixclap",
+      "name": "MixClap: free transition sound effects (CC0 set)",
+      "author": "Freesound contributors, collected by MixClap",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "credit": null,
+      "source": "https://www.mixclap.com/en/blog/transition-sound-effects",
+      "note": "Public domain (CC0 1.0)."
+    }
+  ],
+  "sounds": [
+    {
+      "id": "mixclap/natural-whoosh",
+      "name": "Natural Whoosh",
+      "file": "sfx/mixclap/natural-whoosh.wav",
+      "cat": "Whooshes",
+      "tags": [
+        "whoosh",
+        "swish",
+        "transition"
+      ],
+      "dur": 0.426,
+      "attack": 0.02,
+      "peak": 0.052,
+      "loud": -3.2,
+      "src": "https://www.mixclap.com/transitionEffects/whoosh-bamboo.mp3"
+    },
+    {
+      "id": "mixclap/ethereal-whoosh",
+      "name": "Ethereal Whoosh",
+      "file": "sfx/mixclap/ethereal-whoosh.wav",
+      "cat": "Whooshes",
+      "tags": [
+        "whoosh",
+        "transition"
+      ],
+      "dur": 5.248,
+      "attack": 0.374,
+      "peak": 0.92,
+      "loud": -1.0,
+      "src": "https://www.mixclap.com/transitionEffects/whoosh-ethereal.mp3"
+    },
+    {
+      "id": "mixclap/sci-fi-transition",
+      "name": "Sci-fi Transition",
+      "file": "sfx/mixclap/sci-fi-transition.wav",
+      "cat": "Transitions",
+      "tags": [
+        "transition",
+        "energy"
+      ],
+      "dur": 3.887,
+      "attack": 0.484,
+      "peak": 1.554,
+      "loud": -3.3,
+      "src": "https://www.mixclap.com/transitionEffects/scifi-transition.mp3"
+    },
+    {
+      "id": "mixclap/stereo-whoosh",
+      "name": "Stereo Whoosh",
+      "file": "sfx/mixclap/stereo-whoosh.wav",
+      "cat": "Whooshes",
+      "tags": [
+        "whoosh",
+        "transition"
+      ],
+      "dur": 2.317,
+      "attack": 0.319,
+      "peak": 0.481,
+      "loud": -3.8,
+      "src": "https://www.mixclap.com/transitionEffects/whoosh.mp3"
+    },
+    {
+      "id": "mixclap/fast-whoosh",
+      "name": "Fast Whoosh",
+      "file": "sfx/mixclap/fast-whoosh.wav",
+      "cat": "Whooshes",
+      "tags": [
+        "whoosh",
+        "swish",
+        "transition"
+      ],
+      "dur": 0.52,
+      "attack": 0.21,
+      "peak": 0.312,
+      "loud": -1.2,
+      "src": "https://www.mixclap.com/transitionEffects/whoosh-fast.mp3"
+    },
+    {
+      "id": "mixclap/noise-sweep",
+      "name": "Noise Sweep",
+      "file": "sfx/mixclap/noise-sweep.wav",
+      "cat": "Risers",
+      "tags": [
+        "riser",
+        "transition"
+      ],
+      "dur": 6.0,
+      "attack": 0.474,
+      "peak": 1.863,
+      "loud": -5.7,
+      "src": "https://www.mixclap.com/transitionEffects/noise-sweep.mp3"
+    },
+    {
+      "id": "mixclap/breathy-riser",
+      "name": "Breathy Riser",
+      "file": "sfx/mixclap/breathy-riser.wav",
+      "cat": "Risers",
+      "tags": [
+        "riser"
+      ],
+      "dur": 8.0,
+      "attack": 0.005,
+      "peak": 0.017,
+      "loud": -4.2,
+      "src": "https://www.mixclap.com/transitionEffects/breathy-riser.mp3"
+    },
+    {
+      "id": "mixclap/cinematic-riser",
+      "name": "Cinematic Riser",
+      "file": "sfx/mixclap/cinematic-riser.wav",
+      "cat": "Risers",
+      "tags": [
+        "riser"
+      ],
+      "dur": 8.483,
+      "attack": 0.02,
+      "peak": 2.447,
+      "loud": -4.4,
+      "src": "https://www.mixclap.com/transitionEffects/riser.mp3"
+    },
+    {
+      "id": "mixclap/riser-and-impact",
+      "name": "Riser and Impact",
+      "file": "sfx/mixclap/riser-and-impact.wav",
+      "cat": "Risers",
+      "tags": [
+        "riser",
+        "impact"
+      ],
+      "dur": 4.0,
+      "attack": 0.459,
+      "peak": 1.145,
+      "loud": -2.4,
+      "src": "https://www.mixclap.com/transitionEffects/riser-impact.mp3"
+    },
+    {
+      "id": "mixclap/snare-drum-roll",
+      "name": "Snare Drum Roll",
+      "file": "sfx/mixclap/snare-drum-roll.wav",
+      "cat": "Risers",
+      "tags": [
+        "roll"
+      ],
+      "dur": 1.749,
+      "attack": 0.045,
+      "peak": 1.125,
+      "loud": -2.0,
+      "src": "https://www.mixclap.com/transitionEffects/drumroll.mp3"
+    },
+    {
+      "id": "mixclap/hybrid-impact",
+      "name": "Hybrid Impact",
+      "file": "sfx/mixclap/hybrid-impact.wav",
+      "cat": "Impacts",
+      "tags": [
+        "impact",
+        "hit"
+      ],
+      "dur": 4.288,
+      "attack": 1.262,
+      "peak": 1.749,
+      "loud": -4.7,
+      "src": "https://www.mixclap.com/transitionEffects/hybrid-hit.mp3"
+    },
+    {
+      "id": "mixclap/low-impact",
+      "name": "Low Impact",
+      "file": "sfx/mixclap/low-impact.wav",
+      "cat": "Impacts",
+      "tags": [
+        "impact",
+        "boom"
+      ],
+      "dur": 5.223,
+      "attack": 0.005,
+      "peak": 0.721,
+      "loud": -5.2,
+      "src": "https://www.mixclap.com/transitionEffects/low-impact.mp3"
+    },
+    {
+      "id": "mixclap/cinematic-boom",
+      "name": "Cinematic Boom",
+      "file": "sfx/mixclap/cinematic-boom.wav",
+      "cat": "Impacts",
+      "tags": [
+        "boom",
+        "impact"
+      ],
+      "dur": 6.857,
+      "attack": 0.0,
+      "peak": 0.067,
+      "loud": -4.6,
+      "src": "https://www.mixclap.com/transitionEffects/impact.mp3"
+    },
+    {
+      "id": "mixclap/short-impact",
+      "name": "Short Impact",
+      "file": "sfx/mixclap/short-impact.wav",
+      "cat": "Impacts",
+      "tags": [
+        "impact",
+        "hit"
+      ],
+      "dur": 3.403,
+      "attack": 0.08,
+      "peak": 0.546,
+      "loud": -1.5,
+      "src": "https://www.mixclap.com/transitionEffects/impact-short.mp3"
+    },
+    {
+      "id": "mixclap/sub-drop",
+      "name": "Sub Drop",
+      "file": "sfx/mixclap/sub-drop.wav",
+      "cat": "Impacts",
+      "tags": [
+        "boom",
+        "subdrop"
+      ],
+      "dur": 2.795,
+      "attack": 0.015,
+      "peak": 1.444,
+      "loud": -1.0,
+      "src": "https://www.mixclap.com/transitionEffects/sub-drop.mp3"
+    },
+    {
+      "id": "mixclap/vinyl-scratch",
+      "name": "Vinyl Scratch",
+      "file": "sfx/mixclap/vinyl-scratch.wav",
+      "cat": "Song FX",
+      "tags": [
+        "scratch"
+      ],
+      "dur": 0.705,
+      "attack": 0.05,
+      "peak": 0.117,
+      "loud": -4.8,
+      "src": "https://www.mixclap.com/transitionEffects/scratch.mp3"
+    },
+    {
+      "id": "mixclap/vinyl-rewind",
+      "name": "Vinyl Rewind",
+      "file": "sfx/mixclap/vinyl-rewind.wav",
+      "cat": "Song FX",
+      "tags": [
+        "rewind"
+      ],
+      "dur": 2.68,
+      "attack": 0.005,
+      "peak": 0.766,
+      "loud": -1.0,
+      "src": "https://www.mixclap.com/transitionEffects/vinyl-rewind.mp3"
+    },
+    {
+      "id": "mixclap/tape-stop",
+      "name": "Tape Stop",
+      "file": "sfx/mixclap/tape-stop.wav",
+      "cat": "Song FX",
+      "tags": [
+        "tapestop"
+      ],
+      "dur": 5.589,
+      "attack": 0.05,
+      "peak": 4.293,
+      "loud": -0.6,
+      "src": "https://www.mixclap.com/transitionEffects/tape-stop.mp3"
+    },
+    {
+      "id": "mixclap/lunar-downlifter",
+      "name": "Lunar Downlifter",
+      "file": "sfx/mixclap/lunar-downlifter.wav",
+      "cat": "Downlifters",
+      "tags": [
+        "downlifter"
+      ],
+      "dur": 7.394,
+      "attack": 0.0,
+      "peak": 0.412,
+      "loud": -4.1,
+      "src": "https://www.mixclap.com/transitionEffects/lunar-downlifter.mp3"
+    },
+    {
+      "id": "mixclap/reverse-piano",
+      "name": "Reverse Piano",
+      "file": "sfx/mixclap/reverse-piano.wav",
+      "cat": "Reverses",
+      "tags": [
+        "reverse",
+        "swell"
+      ],
+      "dur": 4.442,
+      "attack": 2.893,
+      "peak": 4.123,
+      "loud": -1.0,
+      "src": "https://www.mixclap.com/transitionEffects/reverse-piano.mp3"
+    },
+    {
+      "id": "mixclap/downlifter",
+      "name": "Downlifter",
+      "file": "sfx/mixclap/downlifter.wav",
+      "cat": "Downlifters",
+      "tags": [
+        "downlifter"
+      ],
+      "dur": 4.029,
+      "attack": 0.0,
+      "peak": 3.34,
+      "loud": -4.3,
+      "src": "https://www.mixclap.com/transitionEffects/downlifter.mp3"
+    },
+    {
+      "id": "mixclap/reverse-cymbal",
+      "name": "Reverse Cymbal (reversed here: the original is a forward cymbal)",
+      "file": "sfx/mixclap/reverse-cymbal.wav",
+      "cat": "Reverses",
+      "tags": [
+        "reverse",
+        "swell"
+      ],
+      "dur": 2.0,
+      "attack": 1.512,
+      "peak": 1.714,
+      "loud": -1.6,
+      "src": "https://www.mixclap.com/transitionEffects/reverse-cymbal.mp3"
+    },
+    {
+      "id": "mixclap/glitch",
+      "name": "Glitch",
+      "file": "sfx/mixclap/glitch.wav",
+      "cat": "Glitches",
+      "tags": [
+        "glitch"
+      ],
+      "dur": 0.931,
+      "attack": 0.0,
+      "peak": 0.616,
+      "loud": -1.0,
+      "src": "https://www.mixclap.com/transitionEffects/glitch.mp3"
+    },
+    {
+      "id": "mixclap/dark-title-stinger",
+      "name": "Dark Title Stinger",
+      "file": "sfx/mixclap/dark-title-stinger.wav",
+      "cat": "Impacts",
+      "tags": [
+        "boom",
+        "stinger"
+      ],
+      "dur": 7.625,
+      "attack": 0.589,
+      "peak": 4.143,
+      "loud": -2.3,
+      "src": "https://www.mixclap.com/transitionEffects/dark-title.mp3"
+    },
+    {
+      "id": "mixclap/crash-cymbal",
+      "name": "Crash Cymbal",
+      "file": "sfx/mixclap/crash-cymbal.wav",
+      "cat": "Impacts",
+      "tags": [
+        "crash",
+        "impact"
+      ],
+      "dur": 3.233,
+      "attack": 0.0,
+      "peak": 0.012,
+      "loud": -3.2,
+      "src": "https://www.mixclap.com/transitionEffects/crash.mp3"
+    }
+  ]
+}

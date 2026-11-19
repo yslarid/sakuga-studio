@@ -1,0 +1,20 @@
+Built-in music
+
+“Exit the Premises” by Kevin MacLeod (incompetech.com)
+Original recording, ISRC USUAN1500029
+https://incompetech.com/music/royalty-free/index.html?Search=Search&isrc=USUAN1500029
+
+“Volatile Reaction” by Kevin MacLeod (incompetech.com)
+Original recording, ISRC USUAN1400039
+https://incompetech.com/music/royalty-free/index.html?Search=Search&isrc=USUAN1400039
+
+Both recordings are included unmodified under Creative Commons Attribution 4.0 International.
+https://creativecommons.org/licenses/by/4.0/
+The license text is included in LICENSE-CC-BY-4.0.txt.
+
+When publishing an edit that uses a track, credit its title and author,
+link the license and identify any changes you made to the recording.
+For example, if you used an excerpt:
+
+Music: “Exit the Premises” by Kevin MacLeod (incompetech.com), excerpt.
+CC BY 4.0, https://creativecommons.org/licenses/by/4.0/

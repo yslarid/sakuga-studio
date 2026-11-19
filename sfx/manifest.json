@@ -1,0 +1,981 @@
+{
+  "packs": [
+    {
+      "id": "kenney",
+      "name": "Kenney — Interface Sounds, Sci-fi Sounds, Voiceover Pack: Fighter, Impact Sounds",
+      "author": "Kenney (kenney.nl)",
+      "license": "CC0 1.0 Universal (public domain dedication)",
+      "credit": null,
+      "source": "https://kenney.nl/assets",
+      "note": "Public domain (CC0 1.0)."
+    }
+  ],
+  "sounds": [
+    {
+      "id": "kenney/announcer-fight",
+      "name": "Announcer Fight",
+      "file": "sfx/kenney/announcer-fight.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 0.931,
+      "attack": 0.162,
+      "peak": 0.369,
+      "loud": -0.4,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-ready",
+      "name": "Announcer Ready",
+      "file": "sfx/kenney/announcer-ready.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.031,
+      "attack": 0.068,
+      "peak": 0.433,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-begin",
+      "name": "Announcer Begin",
+      "file": "sfx/kenney/announcer-begin.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.223,
+      "attack": 0.127,
+      "peak": 0.927,
+      "loud": -1.1,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-round-1",
+      "name": "Announcer Round 1",
+      "file": "sfx/kenney/announcer-round-1.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.354,
+      "attack": 0.137,
+      "peak": 0.873,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-round-2",
+      "name": "Announcer Round 2",
+      "file": "sfx/kenney/announcer-round-2.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.453,
+      "attack": 0.098,
+      "peak": 1.015,
+      "loud": -1.4,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-round-3",
+      "name": "Announcer Round 3",
+      "file": "sfx/kenney/announcer-round-3.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.515,
+      "attack": 0.175,
+      "peak": 0.729,
+      "loud": 0.0,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-final-round",
+      "name": "Announcer Final Round",
+      "file": "sfx/kenney/announcer-final-round.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.692,
+      "attack": 0.17,
+      "peak": 1.147,
+      "loud": -1.6,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-prepare-yourself",
+      "name": "Announcer Prepare Yourself",
+      "file": "sfx/kenney/announcer-prepare-yourself.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.692,
+      "attack": 0.115,
+      "peak": 0.146,
+      "loud": 0.0,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-flawless-victory",
+      "name": "Announcer Flawless Victory",
+      "file": "sfx/kenney/announcer-flawless-victory.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.869,
+      "attack": 0.153,
+      "peak": 0.27,
+      "loud": -0.8,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-you-win",
+      "name": "Announcer You Win",
+      "file": "sfx/kenney/announcer-you-win.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.254,
+      "attack": 0.063,
+      "peak": 0.852,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-you-lose",
+      "name": "Announcer You Lose",
+      "file": "sfx/kenney/announcer-you-lose.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.384,
+      "attack": 0.109,
+      "peak": 0.729,
+      "loud": -1.2,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-winner",
+      "name": "Announcer Winner",
+      "file": "sfx/kenney/announcer-winner.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.423,
+      "attack": 0.117,
+      "peak": 0.877,
+      "loud": -1.1,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-loser",
+      "name": "Announcer Loser",
+      "file": "sfx/kenney/announcer-loser.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.446,
+      "attack": 0.168,
+      "peak": 0.934,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-game-over",
+      "name": "Announcer Game Over",
+      "file": "sfx/kenney/announcer-game-over.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.769,
+      "attack": 0.092,
+      "peak": 1.204,
+      "loud": -1.4,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-combo",
+      "name": "Announcer Combo",
+      "file": "sfx/kenney/announcer-combo.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.169,
+      "attack": 0.194,
+      "peak": 0.578,
+      "loud": -1.3,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-combo-breaker",
+      "name": "Announcer Combo Breaker",
+      "file": "sfx/kenney/announcer-combo-breaker.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.592,
+      "attack": 0.072,
+      "peak": 0.414,
+      "loud": -0.6,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-multi-kill",
+      "name": "Announcer Multi Kill",
+      "file": "sfx/kenney/announcer-multi-kill.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.423,
+      "attack": 0.075,
+      "peak": 0.722,
+      "loud": -1.1,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-sudden-death",
+      "name": "Announcer Sudden Death",
+      "file": "sfx/kenney/announcer-sudden-death.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.438,
+      "attack": 0.256,
+      "peak": 1.14,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-time",
+      "name": "Announcer Time",
+      "file": "sfx/kenney/announcer-time.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.161,
+      "attack": 0.11,
+      "peak": 0.184,
+      "loud": -0.8,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-three",
+      "name": "Announcer Three",
+      "file": "sfx/kenney/announcer-three.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 1.0,
+      "attack": 0.209,
+      "peak": 0.28,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-two",
+      "name": "Announcer Two",
+      "file": "sfx/kenney/announcer-two.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 0.915,
+      "attack": 0.156,
+      "peak": 0.208,
+      "loud": -0.6,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/announcer-one",
+      "name": "Announcer One",
+      "file": "sfx/kenney/announcer-one.wav",
+      "cat": "Voice",
+      "tags": [
+        "voice"
+      ],
+      "dur": 0.961,
+      "attack": 0.108,
+      "peak": 0.504,
+      "loud": -1.3,
+      "src": "https://kenney.nl/assets/voiceover-pack-fighter"
+    },
+    {
+      "id": "kenney/explosion-crunch-short",
+      "name": "Explosion Crunch Short",
+      "file": "sfx/kenney/explosion-crunch-short.wav",
+      "cat": "Impact",
+      "tags": [
+        "explosion"
+      ],
+      "dur": 0.777,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/explosion-crunch",
+      "name": "Explosion Crunch",
+      "file": "sfx/kenney/explosion-crunch.wav",
+      "cat": "Impact",
+      "tags": [
+        "explosion"
+      ],
+      "dur": 1.357,
+      "attack": 0.002,
+      "peak": 0.008,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/explosion-crunch-long",
+      "name": "Explosion Crunch Long",
+      "file": "sfx/kenney/explosion-crunch-long.wav",
+      "cat": "Impact",
+      "tags": [
+        "explosion"
+      ],
+      "dur": 1.553,
+      "attack": 0.002,
+      "peak": 0.011,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/low-explosion-boom",
+      "name": "Low Explosion Boom",
+      "file": "sfx/kenney/low-explosion-boom.wav",
+      "cat": "Cinematic",
+      "tags": [
+        "boom",
+        "explosion"
+      ],
+      "dur": 2.0,
+      "attack": 0.176,
+      "peak": 0.228,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/low-explosion-thump",
+      "name": "Low Explosion Thump",
+      "file": "sfx/kenney/low-explosion-thump.wav",
+      "cat": "Cinematic",
+      "tags": [
+        "boom",
+        "explosion"
+      ],
+      "dur": 1.0,
+      "attack": 0.074,
+      "peak": 0.138,
+      "loud": -0.8,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/force-field",
+      "name": "Force Field",
+      "file": "sfx/kenney/force-field.wav",
+      "cat": "Magic",
+      "tags": [
+        "energy",
+        "magic"
+      ],
+      "dur": 0.954,
+      "attack": 0.049,
+      "peak": 0.13,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/force-field-2",
+      "name": "Force Field 2",
+      "file": "sfx/kenney/force-field-2.wav",
+      "cat": "Magic",
+      "tags": [
+        "energy",
+        "magic"
+      ],
+      "dur": 0.956,
+      "attack": 0.059,
+      "peak": 0.144,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/laser-large",
+      "name": "Laser Large",
+      "file": "sfx/kenney/laser-large.wav",
+      "cat": "Weapons",
+      "tags": [
+        "energy"
+      ],
+      "dur": 0.677,
+      "attack": 0.002,
+      "peak": 0.003,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/laser-large-2",
+      "name": "Laser Large 2",
+      "file": "sfx/kenney/laser-large-2.wav",
+      "cat": "Weapons",
+      "tags": [
+        "energy"
+      ],
+      "dur": 0.744,
+      "attack": 0.002,
+      "peak": 0.004,
+      "loud": -0.8,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/laser-large-3",
+      "name": "Laser Large 3",
+      "file": "sfx/kenney/laser-large-3.wav",
+      "cat": "Weapons",
+      "tags": [
+        "energy"
+      ],
+      "dur": 0.693,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/laser-small",
+      "name": "Laser Small",
+      "file": "sfx/kenney/laser-small.wav",
+      "cat": "Weapons",
+      "tags": [
+        "energy"
+      ],
+      "dur": 0.244,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -2.5,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/laser-small-2",
+      "name": "Laser Small 2",
+      "file": "sfx/kenney/laser-small-2.wav",
+      "cat": "Weapons",
+      "tags": [
+        "energy"
+      ],
+      "dur": 0.411,
+      "attack": 0.002,
+      "peak": 0.008,
+      "loud": -3.2,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/sci-fi-metal-impact",
+      "name": "Sci-Fi Metal Impact",
+      "file": "sfx/kenney/sci-fi-metal-impact.wav",
+      "cat": "Impact",
+      "tags": [
+        "impact",
+        "clash"
+      ],
+      "dur": 0.688,
+      "attack": 0.002,
+      "peak": 0.003,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/sci-fi-metal-impact-2",
+      "name": "Sci-Fi Metal Impact 2",
+      "file": "sfx/kenney/sci-fi-metal-impact-2.wav",
+      "cat": "Impact",
+      "tags": [
+        "impact",
+        "clash"
+      ],
+      "dur": 0.777,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/thruster-fire",
+      "name": "Thruster Fire",
+      "file": "sfx/kenney/thruster-fire.wav",
+      "cat": "Elements",
+      "tags": [
+        "fire"
+      ],
+      "dur": 5.0,
+      "attack": 0.164,
+      "peak": 1.137,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/sci-fi-sounds"
+    },
+    {
+      "id": "kenney/click-soft",
+      "name": "Click Soft",
+      "file": "sfx/kenney/click-soft.wav",
+      "cat": "UI",
+      "tags": [
+        "click"
+      ],
+      "dur": 0.097,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.4,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/click-tight",
+      "name": "Click Tight",
+      "file": "sfx/kenney/click-tight.wav",
+      "cat": "UI",
+      "tags": [
+        "click"
+      ],
+      "dur": 0.012,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/click-snap",
+      "name": "Click Snap",
+      "file": "sfx/kenney/click-snap.wav",
+      "cat": "UI",
+      "tags": [
+        "click"
+      ],
+      "dur": 0.022,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.2,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/confirm-chime",
+      "name": "Confirm Chime",
+      "file": "sfx/kenney/confirm-chime.wav",
+      "cat": "UI",
+      "tags": [
+        "shine",
+        "pop"
+      ],
+      "dur": 0.29,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/confirm-chime-2",
+      "name": "Confirm Chime 2",
+      "file": "sfx/kenney/confirm-chime-2.wav",
+      "cat": "UI",
+      "tags": [
+        "shine",
+        "pop"
+      ],
+      "dur": 0.539,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/glitch-tick",
+      "name": "Glitch Tick",
+      "file": "sfx/kenney/glitch-tick.wav",
+      "cat": "UI",
+      "tags": [
+        "glitch"
+      ],
+      "dur": 0.017,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/glitch-tick-2",
+      "name": "Glitch Tick 2",
+      "file": "sfx/kenney/glitch-tick-2.wav",
+      "cat": "UI",
+      "tags": [
+        "glitch"
+      ],
+      "dur": 0.027,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.2,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/glitch-tick-3",
+      "name": "Glitch Tick 3",
+      "file": "sfx/kenney/glitch-tick-3.wav",
+      "cat": "UI",
+      "tags": [
+        "glitch"
+      ],
+      "dur": 0.02,
+      "attack": 0.002,
+      "peak": 0.01,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/ui-expand",
+      "name": "UI Expand",
+      "file": "sfx/kenney/ui-expand.wav",
+      "cat": "UI",
+      "tags": [
+        "pop"
+      ],
+      "dur": 0.258,
+      "attack": 0.121,
+      "peak": 0.256,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/ui-expand-2",
+      "name": "UI Expand 2",
+      "file": "sfx/kenney/ui-expand-2.wav",
+      "cat": "UI",
+      "tags": [
+        "pop"
+      ],
+      "dur": 0.38,
+      "attack": 0.041,
+      "peak": 0.064,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/ui-collapse",
+      "name": "UI Collapse",
+      "file": "sfx/kenney/ui-collapse.wav",
+      "cat": "UI",
+      "tags": [
+        "pop"
+      ],
+      "dur": 0.258,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/ui-open",
+      "name": "UI Open",
+      "file": "sfx/kenney/ui-open.wav",
+      "cat": "UI",
+      "tags": [
+        "pop"
+      ],
+      "dur": 0.314,
+      "attack": 0.192,
+      "peak": 0.312,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/ui-close",
+      "name": "UI Close",
+      "file": "sfx/kenney/ui-close.wav",
+      "cat": "UI",
+      "tags": [
+        "pop"
+      ],
+      "dur": 0.314,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/ui-pluck",
+      "name": "UI Pluck",
+      "file": "sfx/kenney/ui-pluck.wav",
+      "cat": "UI",
+      "tags": [
+        "pop"
+      ],
+      "dur": 0.1,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": 0.0,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/ui-select",
+      "name": "UI Select",
+      "file": "sfx/kenney/ui-select.wav",
+      "cat": "UI",
+      "tags": [
+        "click",
+        "shine"
+      ],
+      "dur": 0.38,
+      "attack": 0.002,
+      "peak": 0.023,
+      "loud": -0.8,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/ui-switch",
+      "name": "UI Switch",
+      "file": "sfx/kenney/ui-switch.wav",
+      "cat": "UI",
+      "tags": [
+        "click"
+      ],
+      "dur": 0.5,
+      "attack": 0.002,
+      "peak": 0.117,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/ui-toggle",
+      "name": "UI Toggle",
+      "file": "sfx/kenney/ui-toggle.wav",
+      "cat": "UI",
+      "tags": [
+        "click"
+      ],
+      "dur": 0.136,
+      "attack": 0.002,
+      "peak": 0.009,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/ui-tick",
+      "name": "UI Tick",
+      "file": "sfx/kenney/ui-tick.wav",
+      "cat": "UI",
+      "tags": [
+        "click"
+      ],
+      "dur": 0.02,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.2,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/ui-drop",
+      "name": "UI Drop",
+      "file": "sfx/kenney/ui-drop.wav",
+      "cat": "UI",
+      "tags": [
+        "pop"
+      ],
+      "dur": 0.188,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.1,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/ui-bong",
+      "name": "UI Bong",
+      "file": "sfx/kenney/ui-bong.wav",
+      "cat": "UI",
+      "tags": [
+        "pop"
+      ],
+      "dur": 0.12,
+      "attack": 0.002,
+      "peak": 0.003,
+      "loud": -0.9,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/glass-chime",
+      "name": "Glass Chime",
+      "file": "sfx/kenney/glass-chime.wav",
+      "cat": "UI",
+      "tags": [
+        "shine"
+      ],
+      "dur": 0.276,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/glass-chime-long",
+      "name": "Glass Chime Long",
+      "file": "sfx/kenney/glass-chime-long.wav",
+      "cat": "UI",
+      "tags": [
+        "shine"
+      ],
+      "dur": 0.692,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.1,
+      "src": "https://kenney.nl/assets/interface-sounds"
+    },
+    {
+      "id": "kenney/bell-impact-heavy",
+      "name": "Bell Impact Heavy",
+      "file": "sfx/kenney/bell-impact-heavy.wav",
+      "cat": "Impact",
+      "tags": [
+        "impact",
+        "clash"
+      ],
+      "dur": 1.48,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.1,
+      "src": "https://kenney.nl/assets/impact-sounds"
+    },
+    {
+      "id": "kenney/bell-impact-heavy-2",
+      "name": "Bell Impact Heavy 2",
+      "file": "sfx/kenney/bell-impact-heavy-2.wav",
+      "cat": "Impact",
+      "tags": [
+        "impact",
+        "clash"
+      ],
+      "dur": 1.741,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.2,
+      "src": "https://kenney.nl/assets/impact-sounds"
+    },
+    {
+      "id": "kenney/glass-impact-heavy",
+      "name": "Glass Impact Heavy",
+      "file": "sfx/kenney/glass-impact-heavy.wav",
+      "cat": "Impact",
+      "tags": [
+        "impact"
+      ],
+      "dur": 0.429,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/impact-sounds"
+    },
+    {
+      "id": "kenney/glass-impact-heavy-2",
+      "name": "Glass Impact Heavy 2",
+      "file": "sfx/kenney/glass-impact-heavy-2.wav",
+      "cat": "Impact",
+      "tags": [
+        "impact"
+      ],
+      "dur": 0.396,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.2,
+      "src": "https://kenney.nl/assets/impact-sounds"
+    },
+    {
+      "id": "kenney/metal-impact-heavy",
+      "name": "Metal Impact Heavy",
+      "file": "sfx/kenney/metal-impact-heavy.wav",
+      "cat": "Impact",
+      "tags": [
+        "impact",
+        "clash"
+      ],
+      "dur": 0.356,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.1,
+      "src": "https://kenney.nl/assets/impact-sounds"
+    },
+    {
+      "id": "kenney/metal-impact-heavy-2",
+      "name": "Metal Impact Heavy 2",
+      "file": "sfx/kenney/metal-impact-heavy-2.wav",
+      "cat": "Impact",
+      "tags": [
+        "impact",
+        "clash"
+      ],
+      "dur": 0.204,
+      "attack": 0.002,
+      "peak": 0.002,
+      "loud": -1.0,
+      "src": "https://kenney.nl/assets/impact-sounds"
+    },
+    {
+      "id": "kenney/plate-impact-heavy",
+      "name": "Plate Impact Heavy",
+      "file": "sfx/kenney/plate-impact-heavy.wav",
+      "cat": "Impact",
+      "tags": [
+        "impact"
+      ],
+      "dur": 0.494,
+      "attack": 0.002,
+      "peak": 0.016,
+      "loud": -1.4,
+      "src": "https://kenney.nl/assets/impact-sounds"
+    },
+    {
+      "id": "kenney/plate-impact-heavy-2",
+      "name": "Plate Impact Heavy 2",
+      "file": "sfx/kenney/plate-impact-heavy-2.wav",
+      "cat": "Impact",
+      "tags": [
+        "impact"
+      ],
+      "dur": 0.559,
+      "attack": 0.002,
+      "peak": 0.018,
+      "loud": -0.6,
+      "src": "https://kenney.nl/assets/impact-sounds"
+    },
+    {
+      "id": "kenney/stone-pick-impact",
+      "name": "Stone Pick Impact",
+      "file": "sfx/kenney/stone-pick-impact.wav",
+      "cat": "Impact",
+      "tags": [
+        "impact",
+        "hit"
+      ],
+      "dur": 0.937,
+      "attack": 0.002,
+      "peak": 0.013,
+      "loud": -1.1,
+      "src": "https://kenney.nl/assets/impact-sounds"
+    }
+  ]
+}

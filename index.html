@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sakuga Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Cinzel:wght@700&family=DM+Serif+Display:ital@0;1&family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;1,800&family=Noto+Sans+JP:wght@900&family=Permanent+Marker&family=Poppins:wght@600;700&family=Oswald:wght@300;700&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=UnifrakturMaguntia&family=Jost:wght@500;800&family=Playfair+Display:ital,wght@0,700;1,700&family=Cormorant+SC:wght@700&family=Caveat:wght@700&family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<script src="vendor/mp4-muxer.min.js"></script>
+<script src="vendor/mp4box.all.min.js"></script>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><span class="logo">桜</span><span>Sakuga Studio</span></div>
+    <div class="top-controls">
+      <label class="sel"><span>Style</span><select id="styleSel"></select></label>
+      <label class="sel"><span>Length</span><select id="lengthSel"></select></label>
+      <label class="sel" title="Pro: the reference edits' way of cutting: one story in order, a camera that never stops, hidden cuts with sound design, slowed hero shots, a flurry on the drop, one bold colour"><span>Pro</span><input type="checkbox" id="proToggle"></label>
+      <label class="sel"><span>Format</span><select id="formatSel"></select></label>
+      <label class="sel"><span>Layout</span><select id="layoutSel"></select></label>
+    </div>
+    <div class="top-actions">
+      <button id="undoBtn" class="icon-btn" title="Undo (⌘Z)">↶</button>
+      <button id="redoBtn" class="icon-btn" title="Redo (⇧⌘Z)">↷</button>
+      <button id="exportBtn" class="btn primary">Export</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="panel left">
+      <nav class="tabs" data-group="left">
+        <button data-tab="media" class="active">Media</button>
+        <button data-tab="effects">Effects</button>
+        <button data-tab="text">Text</button>
+        <button data-tab="sounds">Sounds</button>
+        <button data-tab="look">Look</button>
+      </nav>
+      <section class="pane active" data-pane="media">
+        <div class="dropzone" id="dropzone">
+          <div class="dz-icon">＋</div>
+          <div class="dz-title">Add footage &amp; a song</div>
+          <div class="dz-sub">Drop video clips and an audio track here, or click to browse</div>
+        </div>
+        <div id="mediaList" class="media-list"></div>
+      </section>
+      <section class="pane" data-pane="effects">
+        <p class="hint">Click to add at the playhead. While playing, tap <kbd>F</kbd> flash · <kbd>Z</kbd> zoom · <kbd>X</kbd> shake · <kbd>G</kbd> glitch · <kbd>R</kbd> RGB — they snap to the beat.</p>
+        <div id="fxGrid" class="tile-grid"></div>
+      </section>
+      <section class="pane" data-pane="text">
+        <div class="lyrics-box" id="lyricsBox">
+          <div class="section-title">🎵 Song lyrics</div>
+          <p class="hint" id="lyricsFor">Load a song, then paste its lyrics here once.</p>
+          <textarea id="autoLyricsPaste" rows="6" placeholder="Paste the song's lyrics here. They fix misheard words in the captions (the timing stays), and they're saved for this song and any clip of it."></textarea>
+          <p class="hint" id="autoLyricsStatus"></p>
+        </div>
+        <p class="hint">Click a style to add text at the playhead.</p>
+        <div id="textGrid" class="tile-grid text-tiles"></div>
+        <div class="section-title">Auto-lyrics</div>
+        <p class="hint">Transcribe vocals in your browser and place each word on the timeline. The speech model downloads on first use.</p>
+        <div class="field-row">
+          <div class="field"><label>Show</label><select id="autoLyricsMode"><option value="kinetic">Kinetic: one big word</option><option value="build">Build-up: words appear as sung</option><option value="word">Word by word</option><option value="phrase">Phrase by phrase</option><option value="giant">Giant words: one at a time, behind the characters</option></select></div>
+          <div class="field"><label>Style</label><select id="autoLyricsStyle"></select></div>
+        </div>
+        <label class="toggle" style="margin-bottom:8px"><input type="checkbox" id="autoLyricsCuts" checked><span>Cut on every word (kinetic)</span></label>
+        <label class="toggle" style="margin-bottom:8px"><input type="checkbox" id="autoLyricsDepth" checked><span>Key words behind the characters (build-up)</span></label>
+        <div class="ai-actions"><button class="btn small primary" id="autoLyricsGo">🎤 Transcribe &amp; caption</button><button class="btn small" id="autoLyricsFix">Fix words</button></div>
+        <div class="section-title">Place words on the beats</div>
+        <p class="hint">Park the playhead where the vocals start, then place: each word or line lands on a beat. Uses the song lyrics at the top unless you type other words here.</p>
+        <div class="field"><textarea id="lyricsText" rows="3" placeholder="Other words (optional)…"></textarea></div>
+        <div class="field-row">
+          <div class="field"><label>Timing</label><select id="lyricsMode"><option value="word">1 word / beat</option><option value="half">1 word / half-beat</option><option value="pair">2 words / beat</option><option value="line">1 line / bar</option></select></div>
+          <div class="field"><label>Style</label><select id="lyricsStyle"></select></div>
+        </div>
+        <div class="ai-actions"><button class="btn small primary" id="lyricsPlace">Place on beats</button><button class="btn small" id="lyricsClear">Clear lyrics</button></div>
+      </section>
+      <section class="pane" data-pane="sounds">
+        <div class="field"><input type="text" id="sfxSearch" placeholder="Search sounds… (whoosh, punch, kick)"></div>
+        <div class="seg" id="sfxTags" style="margin-bottom:10px"></div>
+        <div id="sfxList" class="sfx-list"></div>
+        <p class="hint" id="sfxCredit" style="margin-top:12px"></p>
+      </section>
+      <section class="pane" data-pane="look">
+        <div id="lookGrid" class="look-grid"></div>
+        <div id="lookSliders" class="sliders"></div>
+        <div class="section-title">Watermark</div>
+        <p class="hint">Your logo, see-through, in the bottom-right corner of the picture on every video you export. A plain or dark background is removed automatically.</p>
+        <div id="wmPanel"></div>
+        <input type="file" id="wmFile" accept="image/*" hidden>
+      </section>
+    </aside>
+
+    <section class="center">
+      <div class="preview-wrap" id="previewWrap">
+        <canvas id="preview"></canvas>
+        <div class="empty-state" id="emptyState">
+          <div class="es-badge">桜</div>
+          <h2>Drop your footage to start</h2>
+          <p>Add your clips and a song. Sakuga finds the beats, drops and best moments, then suggests the edits and applies them for you.</p>
+          <div class="start-actions">
+            <button class="btn primary" id="emptyAdd">Choose files</button>
+            <button class="btn" id="openExample">Open example</button>
+          </div>
+        </div>
+      </div>
+      <div class="transport">
+        <span class="tc" id="timecode">0:00.0 / 0:00.0</span>
+        <div class="transport-btns">
+          <button class="icon-btn" id="toStart" title="Go to start (Home)">⏮</button>
+          <button class="icon-btn" id="prevBeat" title="Previous beat (⇧←)">‹</button>
+          <button class="play-btn" id="playBtn" title="Play / pause (Space)">▶</button>
+          <button class="icon-btn" id="nextBeat" title="Next beat (⇧→)">›</button>
+          <button class="icon-btn" id="toEnd" title="Go to end (End)">⏭</button>
+        </div>
+        <span class="beat-info" id="beatInfo"></span>
+      </div>
+    </section>
+
+    <aside class="panel right">
+      <nav class="tabs" data-group="right">
+        <button data-tab="ai" class="active">✨ AI Edits</button>
+        <button data-tab="inspector">Inspector</button>
+      </nav>
+      <section class="pane active" data-pane="ai">
+        <div id="aiPanel"></div>
+      </section>
+      <section class="pane" data-pane="inspector">
+        <div id="inspector"></div>
+      </section>
+    </aside>
+  </main>
+
+  <section class="timeline-area">
+    <div class="tl-toolbar">
+      <button class="tool" id="splitBtn" title="Split clip at playhead (S)">✂ Split</button>
+      <button class="tool" id="deleteBtn" title="Delete selection (⌫)">🗑 Delete</button>
+      <span class="sep"></span>
+      <label class="toggle"><input type="checkbox" id="snapChk" checked><span>Snap to beats</span></label>
+      <span class="grow"></span>
+      <span class="tl-zoom"><span>−</span><input type="range" id="zoomRange" min="0" max="100" value="0"><span>＋</span></span>
+    </div>
+    <div class="timeline" id="timeline">
+      <div class="tl-heads">
+        <div class="tl-head ruler-head"></div>
+        <div class="tl-head" data-track="fx">FX</div>
+        <div class="tl-head" data-track="text">Text</div>
+        <div class="tl-head" data-track="sfx">SFX</div>
+        <div class="tl-head" data-track="video">Video</div>
+        <div class="tl-head" data-track="music">Music</div>
+      </div>
+      <div class="tl-scroll" id="tlScroll">
+        <div class="tl-inner" id="tlInner">
+          <canvas class="tl-ruler" id="tlRuler"></canvas>
+          <div class="tl-track" data-track="fx" id="trackFx"></div>
+          <div class="tl-track" data-track="text" id="trackText"></div>
+          <div class="tl-track" data-track="sfx" id="trackSfx"></div>
+          <div class="tl-track" data-track="video" id="trackVideo"></div>
+          <div class="tl-track" data-track="music" id="trackMusic"><canvas id="tlWave"></canvas></div>
+          <div class="tl-playhead" id="playhead"><span></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toasts"></div>
+<input type="file" id="fileInput" multiple accept="video/*,audio/*,.mkv,.mov,.mp3,.wav,.m4a,.aac,.flac,.ogg" hidden>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
