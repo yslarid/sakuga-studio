@@ -43,4 +43,6 @@ The core editor works with the bundled files. Google Fonts and optional model ru
 
 The [browser smoke test](tests/README.md) imports the example, checks undo and redo, and verifies the exported video and audio streams with FFprobe.
 
-The source here covers the interactive editor and selected local tools. Third-party libraries and media carry their own terms. See the [credits and notices](THIRD_PARTY.md).
+## License
+
+The original Sakuga Studio code in this repository is available under the [MIT License](LICENSE). Bundled libraries and media retain their respective licenses. See the [third-party credits and notices](THIRD_PARTY.md).
