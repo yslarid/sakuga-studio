@@ -8,6 +8,7 @@ import { maskAt, segmentImage } from '../analysis/segment.js';
 import { detectFaces, facesAt } from '../analysis/faces.js';
 import { loadMarkImage } from '../watermark.js';
 import { timelineDuration } from '../state.js';
+import { loadCaptionStyles } from '../render/fonts.js';
 import { fontStack } from '../render/text.js';
 
 // moments that make a poor cover: flashes, blackouts, transitions and other in-between frames
@@ -299,7 +300,8 @@ export async function makeCovers(app, { title, subtitle, at, font, y, x, wide = 
   // (`y` in the cover notes: the title's centre as a share of the height, chosen by the director, say
   // over the collar of a close-up where the search would cross the mouth)
   TITLE_Y = Number(y) > 0 && Number(y) < 1 ? Number(y) : null;
-  await Promise.all([document.fonts.load(`400 120px ${TITLE_FONT}`), document.fonts.load('700 30px Inter')]);
+  await loadCaptionStyles();
+  await Promise.allSettled([document.fonts.load(`400 120px ${TITLE_FONT}`), document.fonts.load('700 30px Inter')]);
   let cands = moments(project).slice(0, 24);
   // a moment you (or the director notes) picked: that frame, still framed on its face
   if (at != null) {

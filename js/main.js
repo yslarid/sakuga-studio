@@ -19,6 +19,7 @@ import {
 import { Renderer, frameParams } from './render/renderer.js';
 import { makeCovers, coverTitle } from './export/cover.js';
 import { TextLayer, TEXT_STYLES, TEXT_ANIMS, KINETIC_FONTS, KINETIC_COLORS, fontStack, loadScriptFonts } from './render/text.js';
+import { loadCaptionStyles, loadUiFont } from './render/fonts.js';
 import { interpolationModelPath } from './render/interp.js';
 import { Player, prepareVoiceStems } from './player.js';
 import { Timeline } from './ui/timeline.js';
@@ -53,6 +54,9 @@ const app = {
     renderInspector();
   },
   changed(opts = {}) {
+    sizePreview();
+    $('#formatSel').value = this.project.format;
+    if (this.project.texts.length) loadCaptionStyles();
     this.player.invalidate();
     this.timeline.render();
     if (opts.inspector !== false) renderInspector();
@@ -70,6 +74,7 @@ app.importFiles = (files) => importFiles(files);
 
 app.history = new History(() => app.project, () => {
   if (app.sel && !findSel(app.sel)) app.sel = null;
+  if (app.plan) app.suggestions = buildSuggestions(app.project, app.plan);
   app.changed();
   renderLook();
 });
@@ -112,7 +117,6 @@ $('#formatSel').onchange = (e) => {
   app.history.push();
   app.project.format = e.target.value;
   if (app.project.auto.applied.includes('reframe')) applyReframe(app.project);
-  sizePreview();
   if (app.plan) app.suggestions = buildSuggestions(app.project, app.plan);
   app.changed();
 };
@@ -132,6 +136,7 @@ document.querySelectorAll('.tabs').forEach((nav) => {
 
 function showTab(group, tab) {
   const nav = document.querySelector(`.tabs[data-group="${group}"]`);
+  if (tab === 'text') loadCaptionStyles();
   nav.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   const panel = nav.parentElement;
   panel.querySelectorAll('.pane').forEach((p) => p.classList.toggle('active', p.dataset.pane === tab));
@@ -144,16 +149,17 @@ function sizePreview() {
   const W = wrap.clientWidth - 32, H = wrap.clientHeight - 32;
   if (W <= 0 || H <= 0) return;
   const s = Math.min(W / w, H / h);
-  const cw = Math.floor(w * s), ch = Math.floor(h * s);
-  canvas.style.width = cw + 'px';
-  canvas.style.height = ch + 'px';
+  const cw = Math.max(1, Math.floor(w * s)), ch = Math.max(1, Math.floor(h * s));
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   const rw = Math.min(w, Math.round(cw * dpr)), rh = Math.round((rw * h) / w);
+  if (canvas.style.width === cw + 'px' && canvas.style.height === ch + 'px' &&
+      canvas.width === rw && canvas.height === rh) return;
+  canvas.style.width = cw + 'px';
+  canvas.style.height = ch + 'px';
   app.renderer.setSize(rw, rh);
   app.textLayer.setSize(rw, rh);
-  app.player.invalidate();
 }
-new ResizeObserver(sizePreview).observe(wrap);
+new ResizeObserver(() => { sizePreview(); app.player.invalidate(); }).observe(wrap);
 
 // ---------- transport ----------
 const playBtn = $('#playBtn');
@@ -425,13 +431,28 @@ function removeMedia(id) {
   // losing a clip that carried the soundtrack picks a new song; removing a built-in song is deliberate
   const removed = getMedia(p, id);
   const lostSong = p.music && p.music.mediaId === id && !(removed && removed.builtin);
+  if (removed?.kind === 'video' && !p.media.some(m => m.kind === 'video' && m.id !== id)) {
+    // Remove generated tracks while their source and saved clip layout still exist.
+    for (const suggestion of [...app.suggestions].reverse()) removeSuggestion(p, suggestion);
+    ++analysisRun;
+    app.analysis = { state: 'idle', steps: [], error: null };
+    app.plan = null;
+    app.suggestions = [];
+    app.autoApplied = false;
+  }
   p.media = p.media.filter((m) => m.id !== id);
   p.clips = p.clips.filter((c) => c.mediaId !== id);
   relayout(p.clips);
   if (p.music && p.music.mediaId === id) p.music = null;
   app.player.dropMedia(id);
-  if (lostSong && p.media.some((m) => m.kind === 'video')) runAnalysis();
-  else if (app.plan) regenerate(); else app.changed();
+  if (lostSong && p.media.some(m => m.kind === 'video')) {
+    app.changed();
+    runAnalysis();
+  } else if (app.plan) {
+    regenerate();
+  } else {
+    app.changed();
+  }
   renderMedia();
 }
 
@@ -534,7 +555,7 @@ async function runAnalysis() {
       app.autoApplied = true;
       autoEdit(true);
       scheduleCadence();
-      toast('✨ Auto edit applied — toggle any suggestion to change it');
+      toast('Auto-edit applied — toggle any suggestion to change it');
     }
   } catch (e) {
     console.error(e);
@@ -582,7 +603,7 @@ function withKnownCuts(a, cuts) {
 function regenerate(o = {}) {
   const p = app.project;
   const ready = p.media.some((m) => m.kind === 'video' && m.analysis);
-  if (!ready) { renderAI(); return; }
+  if (!ready) { app.changed(); return; }
   const wasApplied = [...p.auto.applied];
   if (!o.fresh || wasApplied.length) app.history.push();
   for (const id of [...wasApplied].reverse()) {
@@ -848,7 +869,7 @@ function renderAI() {
     html += `<div class="ai-hero"><h3>${applied.length ? 'Your edit is ready' : 'Suggestions ready'}</h3>
       ${songNote()}
       <p><b style="color:var(--text)">${esc(S.label)}</b> style${app.opts.style === 'auto' ? ` (auto-picked: ${esc(app.plan.why)})` : ''}. ${app.plan.clips.length} cuts over ${fmtTime(app.plan.L)}${p.music ? `, starting ${fmtTime(app.plan.win.start)} into the song` : ''}.</p>
-      <button class="btn primary" id="aiAuto" ${allOn ? 'disabled' : ''}>${allOn ? '✓ All recommended edits applied' : `✨ Auto Edit — apply ${rec.filter((s) => !applied.includes(s.id)).length} recommended`}</button>
+      <button class="btn primary" id="aiAuto" ${allOn ? 'disabled' : ''}>${allOn ? '✓ All recommended edits applied' : `Auto-edit — apply ${rec.filter((s) => !applied.includes(s.id)).length} recommended`}</button>
       <div class="ai-actions">
         <button class="btn small" id="aiRegen" title="Rebuild with the current style, length and order">↻ Regenerate</button>
         <button class="btn small" id="aiClear" ${applied.length ? '' : 'disabled'}>Clear all</button>
@@ -3071,7 +3092,7 @@ function renderInspector() {
         ${sliderField('Fade out', obj.fadeOut, 0, 4, 0.05, (v) => { obj.fadeOut = v; }, (v) => (+v).toFixed(1) + 's')}
       </div>
       <label class="toggle" style="margin:0 0 12px"><input type="checkbox" id="iDuck" ${obj.duck !== false ? 'checked' : ''}><span>Duck the song under clip audio</span></label>
-      <p class="hint">Moving the song start shifts the music under the edit. Hit Regenerate in AI Edits to re-cut everything to the new section.</p>
+      <p class="hint">Moving the song start shifts the music under the edit. Hit Regenerate in Auto-edit to re-cut everything to the new section.</p>
       <div class="insp-actions"><button class="btn small danger" id="iDel">Remove soundtrack</button></div>`;
     $('#iDel').onclick = deleteSelection;
     $('#iDuck').onchange = (e) => { app.history.push(); obj.duck = e.target.checked; app.player.invalidate(); };
@@ -3223,9 +3244,10 @@ renderMedia();
 renderAI();
 renderLook();
 renderInspector();
-updateEmpty();
-sizePreview();
 app.changed();
+loadUiFont();
+document.addEventListener('captionstylesready', () => app.player.invalidate());
+document.fonts?.addEventListener('loadingdone', () => app.player.invalidate());
 
 loadSavedLyrics();
 loadVfxManifest().then(() => { if (app.plan) app.suggestions = buildSuggestions(app.project, app.plan); renderAI(); });

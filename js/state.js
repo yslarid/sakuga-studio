@@ -6,7 +6,7 @@ export const lerp = (a, b, t) => a + (b - a) * t;
 export const smooth = (t) => t * t * (3 - 2 * t);
 
 export const FORMATS = {
-  orig: { w: 1920, h: 1080, label: 'Original · match the footage' },
+  orig: { w: 1920, h: 1080, label: 'Original (match source)' },
   '9:16': { w: 1080, h: 1920, label: '9:16 · TikTok / Reels' },
   '4:5': { w: 1080, h: 1350, label: '4:5 · Instagram feed' },
   '1:1': { w: 1080, h: 1080, label: '1:1 · Square' },
@@ -63,7 +63,7 @@ export function pictureBox(p) {
 export function formatSize(p) {
   if (p.format !== 'orig') return FORMATS[p.format] || FORMATS['9:16'];
   const v = p.media.find((m) => m.kind === 'video' && m.w);
-  if (!v) return { w: 1080, h: 1920, label: 'Original · match the footage' };
+  if (!v) return { w: 1080, h: 1920, label: FORMATS.orig.label };
   const a = v.w / v.h;
   const even = (x) => Math.round(x / 2) * 2;
   const w = a >= 1 ? Math.min(2560, even(1080 * a)) : 1080, h = a >= 1 ? 1080 : Math.min(2560, even(1080 / a));

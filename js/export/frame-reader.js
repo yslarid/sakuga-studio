@@ -1,3 +1,4 @@
+import { loadMp4Box } from './libraries.js';
 import { srcTimeAt } from '../state.js';
 
 // Frame-accurate source frames for export.
@@ -13,8 +14,9 @@ function once(el, ev, timeout = 10000) {
 
 // Frame rate of an MP4/MOV video track (null when it can't be read).
 export async function probeFps(file) {
-  if (!window.MP4Box || !/\.(mp4|m4v|mov)$/i.test(file.name)) return null;
+  if (!/\.(mp4|m4v|mov)$/i.test(file.name)) return null;
   try {
+    const MP4Box = await loadMp4Box();
     const mp4 = MP4Box.createFile(false);
     let info = null;
     mp4.onReady = (i) => { info = i; };
@@ -44,8 +46,9 @@ export async function openFrameSource(media, { hd = false } = {}) {
 }
 
 async function openPlain(media) {
-  if (window.VideoDecoder && window.MP4Box && /\.(mp4|m4v|mov)$/i.test(media.name)) {
+  if (window.VideoDecoder && /\.(mp4|m4v|mov)$/i.test(media.name)) {
     try {
+      await loadMp4Box();
       const r = new Mp4FrameReader(media);
       await r.init();
       return r;

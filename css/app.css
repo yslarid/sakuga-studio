@@ -284,3 +284,25 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px;
 .lyrics-page-card > .hint { margin-bottom: 14px; }
 .lyrics-page-card textarea { min-height: 140px; }
 @keyframes lyricsFlash { 0%, 30% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+@media (max-width: 900px) {
+  html, body { height: auto; min-height: 100%; overflow: auto; }
+  #app { display: flex; flex-direction: column; height: auto; }
+  .topbar { flex-wrap: wrap; gap: 8px; padding-block: 8px; }
+  .top-actions { margin-left: auto; }
+  .top-controls { order: 2; flex: 1 1 100%; max-width: 100%; overflow-x: auto; gap: 6px; }
+  .top-controls .sel { flex: none; }
+  .workspace { display: contents; }
+  .center { order: 1; }
+  .center .preview-wrap { min-height: clamp(280px, 57vw, 450px); }
+  .timeline-area { order: 2; height: 225px; flex: none; }
+  .panel.left { order: 3; }
+  .panel.right { order: 4; }
+  .panel { min-height: 220px; overflow: visible; }
+  .panel .pane { max-height: 60vh; }
+  .transport { padding-inline: 8px; gap: 3px; height: auto; min-height: 50px; }
+  .tc, .beat-info { font-size: 11px; }
+  .tl-toolbar { flex-wrap: wrap; height: auto; gap: 3px; padding: 5px 8px; }
+  .timeline { grid-template-columns: 45px minmax(0,1fr); }
+  .modal { box-sizing: border-box; max-width: calc(100vw - 24px); max-height: 90dvh; overflow: auto; }
+}

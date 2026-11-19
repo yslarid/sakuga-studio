@@ -1,3 +1,4 @@
+import { loadCaptionStyles } from './fonts.js';
 import { markImage } from '../watermark.js';
 
 // Cyrillic: the caption faces with no Cyrillic letters borrow them, letter by letter, from a close
@@ -8,6 +9,7 @@ export const fontStack = (fam) => `"${fam}"${CYRILLIC[fam] ? `, "${CYRILLIC[fam]
 // (a canvas draws with whatever is loaded: before rendering Cyrillic, load the borrowed faces)
 export async function loadScriptFonts(text) {
   if (!/[\u0400-\u052f]/.test(String(text || ''))) return;
+  await loadCaptionStyles();
   const faces = ['700 100px "Oswald"', '700 100px "Playfair Display"', 'italic 700 100px "Playfair Display"', '700 100px "Cormorant SC"', '700 100px "Caveat"', '600 100px "Montserrat"', '700 100px "Montserrat"', '800 100px "Inter"'];
   try { await Promise.all(faces.map((f) => document.fonts.load(f, 'АБВЖЯабвжя'))); } catch (e) { /* drawn with a system face */ }
 }

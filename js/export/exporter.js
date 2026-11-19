@@ -4,7 +4,9 @@ import { timelineDuration, getMedia, srcTimeAt, clipSpan } from '../state.js';
 import { markLayer, loadMarkImage } from '../watermark.js';
 import { maskAt } from '../analysis/segment.js';
 import { Renderer, frameParams, blendAmount } from '../render/renderer.js';
-import { TextLayer } from '../render/text.js';
+import { TextLayer, TEXT_STYLES, fontStack, loadScriptFonts } from '../render/text.js';
+import { loadCaptionStyles } from '../render/fonts.js';
+import { loadMp4Muxer } from './libraries.js';
 import { openFrameSource } from './frame-reader.js';
 import { scheduleMusicGain, scheduleClipAudio, clipAudioRanges, scheduleSongEdits, scheduleMuteGate, masterBus, masterBusDelay } from '../player.js';
 import { preloadProjectSfx, scheduleSfx } from '../sfx.js';
@@ -14,7 +16,7 @@ import { withColr } from './mp4colr.js';
 import { inbetween, interpSuits, frameGate, drawingStarts } from '../render/interp.js';
 
 export function exportSupported() {
-  return typeof window.VideoEncoder === 'function' && typeof window.Mp4Muxer === 'object';
+  return typeof window.VideoEncoder === 'function';
 }
 
 async function pickVideoConfig(w, h, fps, bitrate) {
@@ -215,10 +217,20 @@ async function renderEncode(app, { width, height, fps, outputs, hd = true }, onP
   const project = { ...live, clips: structuredClone(live.clips), effects: structuredClone(live.effects), texts: structuredClone(live.texts), sfx: structuredClone(live.sfx || []), look: structuredClone(live.look), auto: live.auto, renderFps: fps };
   const dur = timelineDuration(project);
   if (dur <= 0) throw new Error('Nothing to export yet — add some footage first.');
+  const Mp4Muxer = await loadMp4Muxer();
   const nFrames = Math.max(1, Math.round(dur * fps));
-  if (document.fonts && document.fonts.ready) await document.fonts.ready;
-  // caption fonts load on first use: make sure every one is in before the first frame
-  if (document.fonts) await Promise.all(['400 40px Anton', '600 40px Poppins', '400 40px "DM Serif Display"', 'italic 400 40px "DM Serif Display"', '700 40px Inter', '800 40px Inter', '700 40px Cinzel', '400 40px Cinzel', '400 40px "Bebas Neue"'].map((f) => document.fonts.load(f).catch(() => {})));
+  if (project.texts.length && document.fonts) {
+    await loadCaptionStyles();
+    const labels = project.texts.map(item => item.text || '').join(' ');
+    await loadScriptFonts(labels);
+    const faces = new Set(['400 40px Anton', '600 40px Poppins', '400 40px "DM Serif Display"', 'italic 400 40px "DM Serif Display"', '700 40px Inter', '800 40px Inter', '700 40px Cinzel', '400 40px Cinzel', '400 40px "Bebas Neue"']);
+    for (const item of project.texts) {
+      const preset = TEXT_STYLES[item.style] || TEXT_STYLES.impact;
+      const face = item.face || item.font || preset.font;
+      faces.add(`${item.italic ? 'italic ' : ''}${item.weight || preset.weight} 40px ${fontStack(face)}`);
+    }
+    await Promise.allSettled([...faces].map(face => document.fonts.load(face, labels)));
+  }
   if (project.watermark) await loadMarkImage(project.watermark.src);
   // (the sign-off card draws the mark it was planned with)
   for (const t of project.texts) if (t.style === 'endcard' && t.mark) await loadMarkImage(t.mark);
