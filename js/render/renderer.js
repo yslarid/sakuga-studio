@@ -1,7 +1,7 @@
 // WebGL2 compositor: layout + transform + distortion + blur + chroma + grade
 // pass, bloom, then a finishing pass (speed lines, leaks, VHS, vignette, grain,
 // bars, text, flash, fade, motion-blur feedback).
-import { clamp, lerp, smooth, clipIndexAt, srcTimeAt, speedAt, getMedia, timelineDuration, clipSpan } from '../state.js';
+import { clamp, lerp, smooth, clipIndexAt, srcTimeAt, speedAt, getMedia, timelineDuration, clipSpan, evalClipKf } from '../state.js';
 import { gridMean } from '../analysis/video.js';
 import { fxState } from '../effects.js';
 import { vfxAsset, vfxImage, vfxMode } from '../vfx.js';
@@ -36,7 +36,7 @@ precision highp float;
 in vec2 vUv;
 out vec4 o;
 uniform sampler2D uSrc;
-uniform float uHasSrc;
+uniform float uHasSrc, uMirror;
 uniform vec2 uCenter, uRegion, uShift, uDirBlur, uSrcTexel, uRegionBg;
 uniform vec4 uWin;
 uniform float uRot, uAspect, uZoomBlur, uRgb, uGlitch, uSeed, uTime, uBgMode, uRot90;
@@ -160,7 +160,9 @@ vec2 toSrcWith(vec2 p, vec2 center, vec2 region, vec2 shift, float rot, vec2 til
   float c = cos(rot), s = sin(rot);
   q = mat2(c, s, -s, c) * q;
   q.x /= uAspect;
-  return center + q * region;
+  vec2 res = center + q * region;
+  if (uMirror > 0.5) res.x = 1.0 - res.x;
+  return res;
 }
 
 vec2 toSrc(vec2 p) {
@@ -177,7 +179,9 @@ vec2 toSrc(vec2 p) {
   float c = cos(uRot), s = sin(uRot);
   q = mat2(c, s, -s, c) * q;
   q.x /= uAspect;
-  return uCenter + q * uRegion;
+  vec2 res = uCenter + q * uRegion;
+  if (uMirror > 0.5) res.x = 1.0 - res.x;
+  return res;
 }
 
 // the character mask at a source point (0 outside the picture band), eased between lo and hi
@@ -965,10 +969,10 @@ precision highp float;
 in vec2 vQ;
 in vec2 vScr;
 out vec4 o;
-uniform sampler2D uAtlas, uMaskQ;
+uniform sampler2D uAtlas, uMaskQ, uBg;
 uniform vec4 uCellA, uCellB; // the two frames being shown: atlas offset and size
 uniform vec2 uInset;
-uniform float uMix, uK, uMode, uBehind, uTintAmt;
+uniform float uMix, uK, uMode, uBehind, uTintAmt, uHasBg, uBlendMode, uLumaKey;
 uniform vec3 uTint;
 void main() {
   vec2 q = clamp(vQ, uInset, 1.0 - uInset);
@@ -979,8 +983,29 @@ void main() {
     vec3 tc = mix(uTint * l * 1.7, vec3(l), smoothstep(0.7, 1.0, l));
     c.rgb = mix(c.rgb, clamp(tc, 0.0, 1.0), uTintAmt);
   }
+  if (uLumaKey > 0.5) {
+    float lv = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+    c.a *= smoothstep(0.05, 0.25, lv);
+  }
   float k = uK;
   if (uBehind > 0.5) k *= 1.0 - smoothstep(0.35, 0.65, texture(uMaskQ, vScr).r);
+  if (uHasBg > 0.5) {
+    vec3 bg = texture(uBg, vScr).rgb;
+    vec3 fg = c.rgb;
+    vec3 res = fg;
+    float a = clamp(c.a * k, 0.0, 1.0);
+    if (uBlendMode < 0.5) res = 1.0 - (1.0 - bg) * (1.0 - fg * a);
+    else if (uBlendMode < 1.5) res = mix(bg, fg, a);
+    else if (uBlendMode < 2.5) res = bg + fg * a;
+    else if (uBlendMode < 3.5) {
+      vec3 ov = mix(2.0 * bg * fg, 1.0 - 2.0 * (1.0 - bg) * (1.0 - fg), step(0.5, bg));
+      res = mix(bg, ov, a);
+    } else {
+      res = mix(bg, bg * fg, a);
+    }
+    o = vec4(clamp(res, 0.0, 1.0), 1.0);
+    return;
+  }
   if (uMode < 0.5) o = vec4(c.rgb * k, 1.0);        // black-background footage: screen
   else if (uMode < 1.5) o = vec4(c.rgb, c.a * k);   // smoke, dust, blood: laid over
   else o = vec4(c.rgb * c.a * k, 1.0);              // glowing sprite: adds light
@@ -1045,6 +1070,7 @@ export class Renderer {
     this.subj = null;
     this.nextTex = this.tex(gl.CLAMP_TO_EDGE);
     this.nextKey = null;
+    this.ovlTex = this.tex(gl.CLAMP_TO_EDGE);
     gl.bindTexture(gl.TEXTURE_2D, this.srcTex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
     this.srcSize = [1, 1];
@@ -1087,7 +1113,7 @@ export class Renderer {
     w = Math.max(2, Math.round(w)); h = Math.max(2, Math.round(h));
     if (w === this.w && h === this.h) return;
     const gl = this.gl;
-    for (const r of [this.sceneRT, this.bloomA, this.bloomB, this.fxRaw, this.fxA, this.fxB, this.fxGlowRT, this.maskRT, this.holdRT, ...(this.outRT || [])]) if (r) { gl.deleteTexture(r.t); gl.deleteFramebuffer(r.fb); }
+    for (const r of [this.sceneRT, this.bloomA, this.bloomB, this.fxRaw, this.fxA, this.fxB, this.fxGlowRT, this.maskRT, this.holdRT, this.compRT, ...(this.outRT || [])]) if (r) { gl.deleteTexture(r.t); gl.deleteFramebuffer(r.fb); }
     this.w = w; this.h = h;
     this.canvas.width = w; this.canvas.height = h;
     this.sceneRT = this.target(w, h);
@@ -1102,6 +1128,7 @@ export class Renderer {
     this.maskRT = this.target(bw, bh); // where the characters are, for overlays that go behind them
     this.outRT = [this.target(w, h), this.target(w, h)];
     this.holdRT = this.target(w, h); // the last frame before a cross-dissolve
+    this.compRT = this.target(w, h); // snapshot of sceneRT for shader blend modes / media overlays
     this.holdKey = null;
   }
 
@@ -1185,21 +1212,39 @@ export class Renderer {
 
   // VFX overlays go into the scene layer (before bloom, so sparks and lightning glow), with the
   // character matte in its alpha left untouched
-  drawOverlays(f) {
+  drawOverlays(f, overlaySources = null) {
+    const BLEND_MODES = { screen: 0, normal: 1, add: 2, overlay: 3, multiply: 4 };
     const list = (f.vfx || []).filter((v) => v.k > 0.002);
-    if (!list.length) return;
+    const medList = (f.mediaOverlays || []).filter((v) => v.k > 0.002 && overlaySources && overlaySources.has(v.id));
+    if (!list.length && !medList.length) return;
     const gl = this.gl;
-    if (list.some((v) => v.behind)) this.pass(this.maskQ, this.maskRT, (u) => { this.bindTex(0, this.sceneRT.t, u.uTex); });
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneRT.fb);
-    gl.viewport(0, 0, this.w, this.h);
-    gl.useProgram(this.overlay.p);
-    gl.bindVertexArray(this.vao);
-    gl.enable(gl.BLEND);
-    gl.colorMask(true, true, true, false);
+    if (list.some((v) => v.behind) || medList.some((v) => v.behind)) {
+      this.pass(this.maskQ, this.maskRT, (u) => { this.bindTex(0, this.sceneRT.t, u.uTex); });
+    }
+    const setupOverlayPass = () => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneRT.fb);
+      gl.viewport(0, 0, this.w, this.h);
+      gl.useProgram(this.overlay.p);
+      gl.bindVertexArray(this.vao);
+      gl.colorMask(true, true, true, false);
+    };
+    const copySceneToComp = () => {
+      this.pass(this.copy, this.compRT, (cu) => {
+        this.bindTex(0, this.sceneRT.t, cu.uTex);
+        gl.uniform1f(cu.uHasMark, 0);
+        gl.uniform1f(cu.uLoopZoom, 1);
+        gl.uniform1f(cu.uLoopMix, 0);
+      });
+      setupOverlayPass();
+    };
+    setupOverlayPass();
     const u = this.overlay.u;
     for (const v of list) {
       const t = this.atlas(v.id);
       if (!t) continue;
+      const blendName = v.blend && v.blend !== 'auto' ? v.blend : (v.mode === 1 ? 'normal' : v.mode === 2 ? 'add' : 'screen');
+      const needsBg = blendName === 'overlay' || blendName === 'multiply';
+      if (needsBg) copySceneToComp();
       const a = v.asset, cw = a.fw / t.w, ch = a.fh / t.h, cols = Math.max(1, a.cols || Math.round(t.w / a.fw));
       const cell = (n) => [(n % cols) * cw, Math.floor(n / cols) * ch, cw, ch];
       this.bindTex(0, t.tex, u.uAtlas);
@@ -1209,24 +1254,65 @@ export class Renderer {
       gl.uniform2f(u.uInset, 0.5 / a.fw, 0.5 / a.fh);
       gl.uniform1f(u.uMix, v.mix);
       gl.uniform1f(u.uK, v.k);
-      gl.uniform1f(u.uMode, v.mode);
+      gl.uniform1f(u.uMode, blendName === 'normal' ? 1 : blendName === 'add' ? 2 : 0);
       gl.uniform1f(u.uBehind, v.behind ? 1 : 0);
       gl.uniform1f(u.uTintAmt, v.tintAmt || 0);
       gl.uniform3fv(u.uTint, v.tint || [1, 1, 1]);
+      gl.uniform1f(u.uLumaKey, 0);
       gl.uniform4f(u.uQuad, v.cx, v.cy, v.hw, v.hh);
       gl.uniform1f(u.uQRot, v.rot || 0);
       gl.uniform1f(u.uQAspect, this.w / this.h);
-      if (v.mode === 1) gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
-      else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_COLOR);
+      if (needsBg) {
+        gl.disable(gl.BLEND);
+        gl.uniform1f(u.uHasBg, 1);
+        gl.uniform1f(u.uBlendMode, BLEND_MODES[blendName] ?? 0);
+        this.bindTex(2, this.compRT.t, u.uBg);
+      } else {
+        gl.enable(gl.BLEND);
+        gl.uniform1f(u.uHasBg, 0);
+        if (blendName === 'normal') gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
+        else if (blendName === 'add') gl.blendFunc(gl.ONE, gl.ONE);
+        else gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_COLOR);
+      }
       if (v.clip) { gl.enable(gl.SCISSOR_TEST); gl.scissor(v.clip[0], v.clip[1], v.clip[2], v.clip[3]); }
       gl.drawArrays(gl.TRIANGLES, 0, 6);
       if (v.clip) gl.disable(gl.SCISSOR_TEST);
+    }
+    for (const v of medList) {
+      const srcEl = overlaySources.get(v.id);
+      if (!srcEl) continue;
+      copySceneToComp();
+      gl.disable(gl.BLEND);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.ovlTex);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, srcEl); } catch { continue; }
+      gl.uniform1i(u.uAtlas, 0);
+      this.bindTex(1, this.maskRT.t, u.uMaskQ);
+      this.bindTex(2, this.compRT.t, u.uBg);
+      gl.uniform4f(u.uCellA, 0, 0, 1, 1);
+      gl.uniform4f(u.uCellB, 0, 0, 1, 1);
+      gl.uniform2f(u.uInset, 0, 0);
+      gl.uniform1f(u.uMix, 0);
+      gl.uniform1f(u.uK, v.k);
+      gl.uniform1f(u.uMode, 0);
+      gl.uniform1f(u.uBehind, v.behind ? 1 : 0);
+      gl.uniform1f(u.uTintAmt, 0);
+      gl.uniform3f(u.uTint, 1, 1, 1);
+      gl.uniform1f(u.uLumaKey, v.lumaKey ? 1 : 0);
+      gl.uniform1f(u.uHasBg, 1);
+      gl.uniform1f(u.uBlendMode, BLEND_MODES[v.blend || 'screen'] ?? 0);
+      gl.uniform4f(u.uQuad, v.cx, v.cy, v.hw, v.hh);
+      gl.uniform1f(u.uQRot, v.rot || 0);
+      gl.uniform1f(u.uQAspect, this.w / this.h);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
     }
     gl.colorMask(true, true, true, true);
     gl.disable(gl.BLEND);
   }
 
-  draw(f, source, textCanvas, look, time, blend = 0, backCanvas = null) {
+  draw(f, source, textCanvas, look, time, blend = 0, backCanvas = null, overlaySources = null) {
     const gl = this.gl;
     let hasSrc = 0;
     if (source) {
@@ -1274,7 +1360,8 @@ export class Renderer {
       gl.uniform2f(u.uTilt, fx.tilt[0], fx.tilt[1]);
       gl.uniform2f(u.uDirBlur, fx.dirBlur[0], fx.dirBlur[1]);
       gl.uniform2f(u.uSrcTexel, 1 / this.srcSize[0], 1 / this.srcSize[1]);
-      gl.uniform1f(u.uRot, fx.rot);
+      gl.uniform1f(u.uMirror, f.mirror ? 1 : 0);
+      gl.uniform1f(u.uRot, f.rot ?? fx.rot);
       gl.uniform1f(u.uAspect, f.aspect);
       gl.uniform1f(u.uZoomBlur, fx.zoomBlur);
       gl.uniform1f(u.uSharpSubj, fx.sharpSubj || 0);
@@ -1336,10 +1423,11 @@ export class Renderer {
       gl.uniform1f(u.uVhs, look.vhs || 0);
       gl.uniform1f(u.uImpact, fx.impact);
       gl.uniform1f(u.uImpactMode, fx.impactMode);
-      gl.uniform1f(u.uExposure, look.exposure + fx.exposure + (f.level || 0) * (look.level || 0) + ((f.clip && f.clip.expo) || 0));
-      gl.uniform1f(u.uContrast, look.contrast);
-      gl.uniform1f(u.uSaturation, look.saturation * (1 + fx.sat));
-      gl.uniform1f(u.uTemp, look.temperature + (fx.temp || 0));
+      const cg = (f.clip && f.clip.grade) || {}, kf = f.kf || {};
+      gl.uniform1f(u.uExposure, look.exposure + fx.exposure + (f.level || 0) * (look.level || 0) + ((f.clip && f.clip.expo) || 0) + (cg.exposure || 0) + (kf.exposure || 0));
+      gl.uniform1f(u.uContrast, look.contrast * (fx.contrast ?? 1) * (cg.contrast ?? 1) * (kf.contrast ?? 1));
+      gl.uniform1f(u.uSaturation, look.saturation * (1 + fx.sat) * (cg.saturation ?? 1) * (kf.saturation ?? 1));
+      gl.uniform1f(u.uTemp, look.temperature + (fx.temp || 0) + (cg.temperature || 0));
       gl.uniform1f(u.uSoftGrade, look.softGrade || 0);
       gl.uniform1f(u.uTint, look.tint);
       gl.uniform1f(u.uFade, look.fade);
@@ -1351,7 +1439,7 @@ export class Renderer {
       gl.uniform3fv(u.uShadows, look.shadows);
       gl.uniform3fv(u.uHighlights, look.highlights);
     });
-    this.drawOverlays(f);
+    this.drawOverlays(f, overlaySources);
     const glow = (look.glow || 0) + ((f.fx && f.fx.bloom) || 0);
     // FX boost: effects found in this frame get their own treatment; punches and drops
     // (energy bursts) push only the effects, never the whole frame
@@ -1560,7 +1648,38 @@ function overlayList(fx, outW, outH, win, toFull, band) {
       if (band) clip = [Math.round(win[0] * outW), Math.round((1 - band[1]) * outH), Math.round(Ww), Math.max(1, Math.round((band[1] - band[0]) * outH))];
     }
     if (v.flip) hw = -hw;
-    out.push({ id: v.id, asset: a, fa, fb, mix, k, cx, cy, hw, hh, rot: v.rot + (a.still ? v.p * 0.6 : 0), mode: vfxMode(a), behind: v.behind, tint: v.tintAmt > 0 ? hexRgb(v.tint) : null, tintAmt: v.tintAmt, clip });
+    out.push({ id: v.id, asset: a, fa, fb, mix, k, cx, cy, hw, hh, rot: v.rot + (a.still ? v.p * 0.6 : 0), mode: vfxMode(a), blend: v.blend || 'auto', behind: v.behind, tint: v.tintAmt > 0 ? hexRgb(v.tint) : null, tintAmt: v.tintAmt, clip });
+  }
+  return out;
+}
+
+function mediaOverlaysFor(project, t, outW, outH, win, Ao) {
+  const ovs = project.overlays || [];
+  if (!ovs.length) return [];
+  const out = [], Aout = outW / outH;
+  const winW = win[2] - win[0], winH = win[3] - win[1];
+  for (const ov of ovs) {
+    if (ov.muted || t < ov.start || t >= ov.start + ov.dur) continue;
+    const m = getMedia(project, ov.mediaId);
+    const Ma = m && m.w && m.h ? m.w / m.h : Ao;
+    let ww, hh;
+    if (Ma > Ao) { ww = winW; hh = winW * Aout / Ma; }
+    else { hh = winH; ww = winH * Ma / Aout; }
+    const sc = ov.scale ?? 1;
+    out.push({
+      id: ov.id,
+      mediaId: ov.mediaId,
+      srcTime: (ov.srcIn || 0) + (t - ov.start) * (ov.speed || 1),
+      cx: ov.x ?? 0.5,
+      cy: ov.y ?? 0.5,
+      hw: 0.5 * ww * sc * (ov.flip ? -1 : 1),
+      hh: 0.5 * hh * sc,
+      rot: ov.rot || 0,
+      k: ov.opacity ?? 1,
+      blend: ov.blend || 'screen',
+      lumaKey: !!ov.lumaKey,
+      behind: !!ov.behind,
+    });
   }
   return out;
 }
@@ -1611,7 +1730,7 @@ export function frameParams(project, t, outW, outH, { noPrev = false } = {}) {
     win = [(1 - ww) / 2, (1 - wh) / 2, (1 + ww) / 2, (1 + wh) / 2];
     Ao = wa;
   }
-  const base = { t, fx, idx, clip: null, media: null, srcTime: 0, speed: 1, center: [0.5, 0.5], region: [1, 1], regionBg: [1, 1], win, aspect: Ao, bgMode, rot90, focusOut: [0.5, 0.45], loop: loopAt(project, t), vfx: overlayList(fx, outW, outH, win, null) };
+  const base = { t, fx, idx, clip: null, media: null, srcTime: 0, speed: 1, center: [0.5, 0.5], region: [1, 1], regionBg: [1, 1], win, aspect: Ao, bgMode, rot90, rot: fx.rot, mirror: false, kf: null, focusOut: [0.5, 0.45], loop: loopAt(project, t), vfx: overlayList(fx, outW, outH, win, null), mediaOverlays: mediaOverlaysFor(project, t, outW, outH, win, Ao) };
   if (idx < 0) return base;
   const clip = project.clips[idx];
   const media = getMedia(project, clip.mediaId);
@@ -1628,6 +1747,10 @@ export function frameParams(project, t, outW, outH, { noPrev = false } = {}) {
   } else if (As > Ao) { rh = 1; rw = Ao / As; } else { rw = 1; rh = As / Ao; }
   const bgS = As > Aout ? [Aout / As, 1] : [1, As / Aout];
   const cam = fx.cam;
+  const local = t - clip.start;
+  const kf = evalClipKf(clip, local);
+  const clipZoom = kf && kf.zoom != null ? kf.zoom : (clip.zoom || 1);
+  const totalRot = fx.rot + (clip.rot || 0) + (kf && kf.rot != null ? kf.rot : 0);
   // a crop that can already pan (portrait from landscape) needs less push-in to follow
   // (`exact`: a framing set by hand, every value as written)
   const camZ = cam ? 1 + (cam.z - 1) * ((rw < 0.85 || rh < 0.85) && !cam.exact ? 0.5 : 1) : 1;
@@ -1641,18 +1764,20 @@ export function frameParams(project, t, outW, outH, { noPrev = false } = {}) {
   const winH = (win[3] - win[1]) * outH, rest = winH / ((rot90 ? media.w : media.h) * rh);
   const pro = !!(project.auto && project.auto.ctx && project.auto.ctx.pro);
   const capH = Math.max(1.08, (pro ? MAG_HOLD_PRO : MAG_HOLD) / rest), capP = Math.max(1.25, (pro ? MAG_PEAK_PRO : MAG_PEAK) / rest);
-  const zRest = cam && cam.exact ? clip.zoom || 1 : softCap(clip.zoom || 1, capH);
-  const zHold = cam && cam.exact ? (clip.zoom || 1) * camZ : softCap((clip.zoom || 1) * (cam && !cam.burst ? camZ : 1), capH);
+  const zRest = cam && cam.exact ? clipZoom : softCap(clipZoom, capH);
+  const zHold = cam && cam.exact ? clipZoom * camZ : softCap(clipZoom * (cam && !cam.burst ? camZ : 1), capH);
   const zMove = zHold * fx.scale * (cam && cam.burst ? camZ : 1);
-  const cover = Math.abs(Math.cos(fx.rot)) + Math.abs(Math.sin(fx.rot)) * Math.max(Ao, 1 / Ao);
+  const cover = Math.abs(Math.cos(totalRot)) + Math.abs(Math.sin(totalRot)) * Math.max(Ao, 1 / Ao);
   const zoom = cam && cam.exact ? zMove * (1 + fx.shake * 1.8) : Math.max(softCap(zMove, capP), Math.min(zMove, cover)) * (1 + fx.shake * 1.8);
   const mag = rest * zHold;
   // the shot's resting framing (no camera move, punch or shake), for text that rides along
   const rw0 = rw / zRest, rh0 = rh / zRest;
   rw /= zoom; rh /= zoom;
-  const local = t - clip.start;
   let cx = 0.5, cy = 0.5;
-  if (clip.pan && !rot90) cx = cam && cam.lock ? clip.focus ?? (clip.pan[0] + clip.pan[1]) / 2 : lerp(clip.pan[0], clip.pan[1], smooth(clamp(local / clip.dur, 0, 1)));
+  if (kf && kf.panX != null && !rot90) cx = kf.panX;
+  else if (clip.pan && !rot90) cx = cam && cam.lock ? clip.focus ?? (clip.pan[0] + clip.pan[1]) / 2 : lerp(clip.pan[0], clip.pan[1], smooth(clamp(local / clip.dur, 0, 1)));
+  if (kf && kf.panY != null && !rot90) cy = kf.panY;
+  else if (clip.panY != null && !rot90) cy = clip.panY;
   // the camera move frames the character along its smoothed path, easing off softly near the
   // edge of the picture instead of stopping dead against it
   const tracking = cam && cam.w > 0 && cam.x != null && !rot90;
@@ -1680,11 +1805,12 @@ export function frameParams(project, t, outW, outH, { noPrev = false } = {}) {
   const srcMotion = g ? g.motion[Math.max(0, Math.min(g.motion.length - 1, Math.floor(srcTime * g.rate)))] : 0;
   // eye glints: the eyes of the biggest face found in this frame (a third and two thirds across the
   // face, just above halfway down), carried through the crop, zoom and shake with the picture
+  const mx = clip.mirror ? (x) => 1 - x : (x) => x;
   let glints = null;
   if (fx.glint > 0.01 && !rot90 && !noPrev) { // (the camera's look back only needs the framing)
     const b = faceBoxAt(media, srcTime);
     if (b) {
-      const toFull = (x, y) => [win[0] + ((x - (cx - rw / 2)) / rw + fx.tx) * (win[2] - win[0]), win[1] + ((y - (cy - rh / 2)) / rh + fx.ty) * (win[3] - win[1])];
+      const toFull = (x, y) => [win[0] + ((mx(x) - (cx - rw / 2)) / rw + fx.tx) * (win[2] - win[0]), win[1] + ((y - (cy - rh / 2)) / rh + fx.ty) * (win[3] - win[1])];
       const fw = b[2] - b[0], fh = b[3] - b[1], size = Math.min(0.09, (fh / rh) * (win[3] - win[1]) * 0.22);
       glints = [[b[0] + fw * 0.3, b[1] + fh * 0.52], [b[0] + fw * 0.7, b[1] + fh * 0.52]].map(([x, y], i) => { const [X, Y] = toFull(x, y); return { x: X, y: Y, s: size * (i ? 0.75 : 1), k: fx.glint * (i ? 0.8 : 1) }; }).filter((g) => g.x > 0.02 && g.x < 0.98 && g.y > 0.02 && g.y < 0.98);
     }
@@ -1699,17 +1825,17 @@ export function frameParams(project, t, outW, outH, { noPrev = false } = {}) {
     const q = frameParams(project, t - CAM_SHUTTER, outW, outH, { noPrev: true });
     const q2 = q.clip === clip ? frameParams(project, t - 2 * CAM_SHUTTER, outW, outH, { noPrev: true }) : null;
     if (q2 && q2.clip === clip) {
-      const pose = (f) => [Math.log(f.region[0]), f.center[0] + f.fx.tx, f.center[1] + f.fx.ty, f.fx.rot * 0.3];
-      const a = pose(q2), b = pose(q), c = [Math.log(rw), cx + fx.tx, cy + fx.ty, fx.rot * 0.3];
+      const pose = (f) => [Math.log(f.region[0]), f.center[0] + f.fx.tx, f.center[1] + f.fx.ty, (f.rot ?? f.fx.rot) * 0.3];
+      const a = pose(q2), b = pose(q), c = [Math.log(rw), cx + fx.tx, cy + fx.ty, totalRot * 0.3];
       const d1 = Math.hypot(...c.map((v, i) => v - b[i])), d0 = Math.hypot(...b.map((v, i) => v - a[i]));
-      if (d1 < 2.5 * d0 + 0.0015) camPrev = { center: q.center, region: q.region, shift: [q.fx.tx, q.fx.ty], rot: q.fx.rot, tilt: q.fx.tilt };
+      if (d1 < 2.5 * d0 + 0.0015) camPrev = { center: q.center, region: q.region, shift: [q.fx.tx, q.fx.ty], rot: q.rot ?? q.fx.rot, tilt: q.fx.tilt };
     }
   }
-  const pin = rot90 ? null : (x, y) => [win[0] + ((x - (cx - rw / 2)) / rw + fx.tx) * (win[2] - win[0]), win[1] + ((y - (cy - rh / 2)) / rh + fx.ty) * (win[3] - win[1])];
+  const pin = rot90 ? null : (x, y) => [win[0] + ((mx(x) - (cx - rw / 2)) / rw + fx.tx) * (win[2] - win[0]), win[1] + ((y - (cy - rh / 2)) / rh + fx.ty) * (win[3] - win[1])];
   return {
     camPrev, mag, glints,
     preview: fx.preview && !rot90 ? previewFor(project, fx.preview, idx, Ao, restBand ? [(restBand[0] - win[1]) / (win[3] - win[1]), (restBand[1] - win[1]) / (win[3] - win[1])] : null) : null,
-    ...base, clip, media, aspect: Ao, bgMode, rot90, srcMotion, focusOut, shock, band: restBand,
+    ...base, clip, media, aspect: Ao, bgMode, rot90, rot: totalRot, mirror: !!clip.mirror, kf, srcMotion, focusOut, shock, band: restBand,
     srcBox: restBand && media.analysis && media.analysis.box ? [media.analysis.box.top + 0.002, media.analysis.box.bottom - 0.002] : null,
     // captions ride along with the camera (partly, like parallax): a push-in or pan carries the
     // words a little with the picture instead of leaving them pasted on top. (Not in a pro edit: its

@@ -4,7 +4,7 @@ import {
   uid, clamp, createProject, FORMATS, LAYOUTS, formatSize, getMedia, History, fmtTime, relayout, pictureBox,
   timelineDuration, timelineMusic, clipIndexAt, srcTimeAt, speedFromKeys, avgSpeedOfKeys, clipSpan,
 } from './state.js';
-import { FX, defaultParams, LOOKS, applyLookPreset } from './effects.js';
+import { FX, FX_CATEGORIES, defaultParams, LOOKS, applyLookPreset } from './effects.js';
 import { decodeAudio, analyzeMusic, audioContext, peaksOf } from './analysis/audio.js';
 import { matchFullSong, alignedSlice, bandwidth } from './analysis/fullsong.js';
 import { loadVideoMeta, makeThumb, analyzeVideo, salProfile, bestCropCenter, gridMean } from './analysis/video.js';
@@ -14,15 +14,19 @@ import { loadVfxManifest, vfxManifest, vfxAsset, preloadProjectVfx } from './vfx
 import { transcribeSong, transcribeDialogue, finishDialogue, phrases, sentenceLines, alignLyrics, alignWordsToAudio, unlagWords, vocalPhrases, vocalRuns, foldLookalikes } from './lyrics.js';
 import {
   STYLES, LENGTHS, buildPlan, buildSuggestions, baseClips, applySuggestion, removeSuggestion,
-  applyReframe, reapplyClipMods, SPEED_CURVES, reframePan, cropWidth, cadenceGuard,
+  applyReframe, reapplyClipMods, SPEED_CURVES, reframePan, cropWidth, cadenceGuard, autoColorMatch,
 } from './engine/autoedit.js';
+import { extractPose, scorePosePair, computeAlignTransform } from './engine/matchcut.js';
 import { Renderer, frameParams } from './render/renderer.js';
 import { makeCovers, coverTitle } from './export/cover.js';
-import { TextLayer, TEXT_STYLES, TEXT_ANIMS, KINETIC_FONTS, KINETIC_COLORS, fontStack, loadScriptFonts } from './render/text.js';
+import { TextLayer, TEXT_STYLES, TEXT_ANIMS, TEXT_FONTS, KINETIC_FONTS, KINETIC_COLORS, fontStack, loadScriptFonts } from './render/text.js';
 import { loadCaptionStyles, loadUiFont } from './render/fonts.js';
 import { interpolationModelPath } from './render/interp.js';
 import { Player, prepareVoiceStems } from './player.js';
 import { Timeline } from './ui/timeline.js';
+import { GraphEditor } from './ui/graph-editor.js';
+import { CanvasGizmo } from './ui/canvas-gizmo.js';
+import { renderQAPanel, updateQABadge } from './ui/qa-panel.js';
 import { exportVideo, exportSupported } from './export/exporter.js';
 import { probeFps, openFrameSource } from './export/frame-reader.js';
 import { segmentTimes, segmentFrames, maskAt, maskNear, maskStats } from './analysis/segment.js';
@@ -52,6 +56,11 @@ const app = {
     if (sel) showTab('right', 'inspector');
     this.timeline.render();
     renderInspector();
+    if (this.gizmo) this.gizmo.render();
+    if (this.graphEditor && this.graphEditor.isOpen()) {
+      if (sel && (sel.kind === 'clip' || sel.kind === 'fx')) this.graphEditor.setTarget({ type: sel.kind, id: sel.id });
+      else this.graphEditor.render();
+    }
   },
   changed(opts = {}) {
     sizePreview();
@@ -60,9 +69,14 @@ const app = {
     this.player.invalidate();
     this.timeline.render();
     if (opts.inspector !== false) renderInspector();
+    if (this.gizmo) this.gizmo.render();
+    if (this.graphEditor && this.graphEditor.isOpen()) this.graphEditor.render();
     renderAI();
     updateEmpty();
     updateTransport();
+    updateQABadge(this);
+    const qaBtn = document.querySelector('.tabs[data-group="right"] button[data-tab="qa"]');
+    if (qaBtn && qaBtn.classList.contains('active')) renderQAPanel(this, $('#qaPanel'));
     preloadProjectSfx(this.project).then(() => this.player.invalidate());
     preloadProjectVfx(this.project).then(() => this.player.invalidate());
     const ls = document.getElementById('layoutSel');
@@ -90,6 +104,12 @@ try {
 app.textLayer = new TextLayer();
 app.player = new Player(app);
 app.timeline = new Timeline(app);
+app.qaIssues = [];
+app.openQA = () => { showTab('right', 'qa'); renderQAPanel(app, $('#qaPanel')); };
+app.graphEditor = new GraphEditor(app, $('#graphDrawer'));
+app.gizmo = new CanvasGizmo(app, $('#canvasGizmo'), canvas);
+if ($('#btnCurves')) $('#btnCurves').onclick = () => app.graphEditor.toggle();
+if ($('#btnQA')) $('#btnQA').onclick = () => app.openQA();
 
 function fillSelect(el, entries, value) {
   el.innerHTML = entries.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
@@ -140,6 +160,7 @@ function showTab(group, tab) {
   nav.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   const panel = nav.parentElement;
   panel.querySelectorAll('.pane').forEach((p) => p.classList.toggle('active', p.dataset.pane === tab));
+  if (group === 'right' && tab === 'qa') renderQAPanel(app, $('#qaPanel'));
 }
 
 // ---------- preview sizing ----------
@@ -158,6 +179,7 @@ function sizePreview() {
   canvas.style.height = ch + 'px';
   app.renderer.setSize(rw, rh);
   app.textLayer.setSize(rw, rh);
+  if (app.gizmo) app.gizmo.resize();
 }
 new ResizeObserver(() => { sizePreview(); app.player.invalidate(); }).observe(wrap);
 
@@ -177,7 +199,12 @@ function jumpBeat(dir) {
   if (b != null) app.player.seek(b);
 }
 
-app.on('time', () => { app.timeline.updatePlayhead(); updateTransport(); });
+app.on('time', () => {
+  app.timeline.updatePlayhead();
+  updateTransport();
+  if (app.gizmo) app.gizmo.render();
+  if (app.graphEditor && app.graphEditor.isOpen()) app.graphEditor.render();
+});
 app.on('play', () => {
   playBtn.textContent = app.player.playing ? '❚❚' : '▶';
   playBtn.classList.toggle('playing', app.player.playing);
@@ -242,14 +269,17 @@ for (const el of [$('#dropzone'), wrap, document.body]) {
 
 const AUDIO_EXT = /\.(mp3|wav|m4a|aac|flac|ogg|opus)$/i;
 const VIDEO_EXT = /\.(mp4|m4v|mov|webm|mkv|avi)$/i;
+const IMAGE_EXT = /\.(png|jpe?g|webp|gif|bmp|avif)$/i;
 
 async function importFiles(files) {
   const added = [];
   for (const file of files) {
     const isAudio = file.type.startsWith('audio/') || AUDIO_EXT.test(file.name);
     const isVideo = file.type.startsWith('video/') || VIDEO_EXT.test(file.name);
-    if (!isAudio && !isVideo) { toast(`Skipped ${file.name} (not audio/video)`, true); continue; }
-    const media = { id: uid('m'), name: file.name, kind: isAudio ? 'audio' : 'video', file, url: URL.createObjectURL(file), duration: 0, w: 0, h: 0, status: 'loading', analysis: null, audio: null, knownCuts: file.knownCuts || null, dialogueSrc: file.dialogue || null, hd: file.hd || null, beatsSrc: file.beats || null };
+    const isImage = file.type.startsWith('image/') || IMAGE_EXT.test(file.name);
+    if (!isAudio && !isVideo && !isImage) { toast(`Skipped ${file.name} (not audio/video/image)`, true); continue; }
+    const kind = isAudio ? 'audio' : isImage ? 'image' : 'video';
+    const media = { id: uid('m'), name: file.name, kind, type: kind, file, url: URL.createObjectURL(file), duration: isImage ? 5 : 0, w: 0, h: 0, status: 'loading', analysis: null, audio: null, knownCuts: file.knownCuts || null, dialogueSrc: file.dialogue || null, hd: file.hd || null, beatsSrc: file.beats || null };
     app.project.media.push(media);
     added.push(media);
   }
@@ -265,6 +295,12 @@ async function importFiles(files) {
         m.thumb = await makeThumb(v, Math.min(1, v.duration / 3));
         m.fps = await probeFps(m.file);
         v.removeAttribute('src'); v.load();
+      } else if (m.kind === 'image') {
+        const img = new Image();
+        img.src = m.url;
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+        m.w = img.naturalWidth; m.h = img.naturalHeight;
+        m.thumb = m.url;
       } else {
         await decodeAudio(m);
         m.duration = m.audio.buffer.duration;
@@ -280,7 +316,7 @@ async function importFiles(files) {
     } catch (e) {
       console.warn(`[import] ${m.name}:`, e);
       m.status = 'error';
-      m.error = m.kind === 'video' ? "This browser can't play this video format" : "This audio file couldn't be decoded";
+      m.error = m.kind === 'video' ? "This browser can't play this video format" : m.kind === 'image' ? "This image couldn't be loaded" : "This audio file couldn't be decoded";
       toast(`${m.name}: ${m.error}`, true);
     }
     renderMedia();
@@ -288,12 +324,12 @@ async function importFiles(files) {
   const p = app.project;
   const song = added.find((m) => m.kind === 'audio' && m.status === 'ready');
   if (song && (!p.music || p.music.auto)) setMusic(song, false);
-  if (!p.clips.length) {
+  if (!p.clips.length && p.media.some((m) => m.kind === 'video' && m.status === 'ready')) {
     p.clips = baseClips(p, null);
     relayout(p.clips);
   }
   app.changed();
-  runAnalysis();
+  if (added.some((m) => m.kind === 'video' || m.kind === 'audio')) runAnalysis();
 }
 
 // Royalty-free songs bundled with the app (Kevin MacLeod, CC BY 4.0). Edits are
@@ -442,6 +478,7 @@ function removeMedia(id) {
   }
   p.media = p.media.filter((m) => m.id !== id);
   p.clips = p.clips.filter((c) => c.mediaId !== id);
+  p.overlays = (p.overlays || []).filter((o) => o.mediaId !== id);
   relayout(p.clips);
   if (p.music && p.music.mediaId === id) p.music = null;
   app.player.dropMedia(id);
@@ -921,6 +958,31 @@ function renderAISteps() {
 }
 
 // ---------- media panel ----------
+function addOverlayFromMedia(m) {
+  const p = app.project;
+  p.overlays = p.overlays || [];
+  app.history.push();
+  const ov = {
+    id: uid('ov'),
+    mediaId: m.id,
+    start: app.player.t,
+    dur: Math.min(m.kind === 'image' ? 4 : (m.duration || 4), 4),
+    srcIn: 0,
+    speed: 1,
+    x: 0.5,
+    y: 0.5,
+    scale: 1,
+    rot: 0,
+    opacity: 1,
+    blend: 'screen',
+    lumaKey: false,
+    behind: false,
+  };
+  p.overlays.push(ov);
+  app.select({ kind: 'ovl', id: ov.id });
+  app.changed();
+}
+
 function renderMedia() {
   const p = app.project;
   const el = $('#mediaList');
@@ -931,16 +993,20 @@ function renderMedia() {
     if (m.status === 'analyzing') chips.push(`<span class="chip busy" data-prog="${m.id}">Scanning ${Math.round((m.progress || 0) * 100)}%</span>`);
     if (m.status === 'error') chips.push(`<span class="chip err">${esc(m.error || 'Error')}</span>`);
     if (m.analysis) chips.push(`<span class="chip ok">${m.analysis.scenes.length} scenes</span>`);
+    if (m.masks && m.masks.frames && m.masks.frames.size) chips.push('<span class="chip ok">🎭 matte</span>');
     if (isMusic) chips.push(`<span class="chip music">♪ Soundtrack${m.audio && m.audio.analysis ? ' · ' + Math.round(m.audio.analysis.bpm) + ' BPM' : ''}</span>`);
     const canMusic = !isMusic && m.status === 'ready' && (m.kind === 'audio' || m.kind === 'video');
+    const canOvl = m.status === 'ready' && (m.kind === 'video' || m.kind === 'image');
+    const subTxt = m.kind === 'video' ? (m.w ? `${m.w}×${m.h}` : 'video') : m.kind === 'image' ? (m.w ? `${m.w}×${m.h} image` : 'image') : m.guide ? 'tempo guide · plays here, never exported' : 'audio';
     return `<div class="media-item">
       <div class="thumb" style="${m.thumb ? `background-image:url(${m.thumb})` : ''}">${m.kind === 'audio' ? '♪' : ''}<span class="dur">${fmtTime(m.duration, false)}</span></div>
       <div class="meta"><div class="name" title="${esc(m.name)}">${esc(m.name)}</div>
-        <div class="sub">${m.kind === 'video' ? (m.w ? `${m.w}×${m.h}` : 'video') : m.guide ? 'tempo guide · plays here, never exported' : 'audio'}</div>
+        <div class="sub">${subTxt}</div>
         <div class="row">${chips.join('')}</div>
-        <div class="row">${canMusic ? `<button class="link-btn" data-music="${m.id}">Use as soundtrack</button>` : ''}${isMusic && !m.guide ? `<button class="link-btn" data-lyrics>${hasLyrics() ? 'Lyrics ✓' : 'Add lyrics'}</button>` : ''}${isMusic && !m.guide && m.audio ? (m.audio.full ? `<button class="link-btn" data-fullsong-off title="Matched at ${m.audio.full.offset.toFixed(1)} s into ${esc(m.audio.full.name)} (${Math.round(m.audio.full.score * 100)}% match)">Full quality ✓ · use the clip</button>` : `<button class="link-btn" data-fullsong title="Add a full download of this song: it's matched to the clip and plays and exports in its place, at its quality">Full-quality song…</button>`) : ''}<button class="link-btn" data-remove="${m.id}">Remove</button></div>
+        <div class="row">${canOvl ? `<button class="link-btn" data-ovl="${m.id}" title="Add as layer on OVL track">+ OVL</button>` : ''}${canMusic ? `<button class="link-btn" data-music="${m.id}">Use as soundtrack</button>` : ''}${isMusic && !m.guide ? `<button class="link-btn" data-lyrics>${hasLyrics() ? 'Lyrics ✓' : 'Add lyrics'}</button>` : ''}${isMusic && !m.guide && m.audio ? (m.audio.full ? `<button class="link-btn" data-fullsong-off title="Matched at ${m.audio.full.offset.toFixed(1)} s into ${esc(m.audio.full.name)} (${Math.round(m.audio.full.score * 100)}% match)">Full quality ✓ · use the clip</button>` : `<button class="link-btn" data-fullsong title="Add a full download of this song: it's matched to the clip and plays and exports in its place, at its quality">Full-quality song…</button>`) : ''}<button class="link-btn" data-remove="${m.id}">Remove</button></div>
       </div></div>`;
   }).join('');
+  el.querySelectorAll('[data-ovl]').forEach((b) => { b.onclick = () => { const m = getMedia(p, b.dataset.ovl); if (m) addOverlayFromMedia(m); }; });
   el.querySelectorAll('[data-remove]').forEach((b) => { b.onclick = () => removeMedia(b.dataset.remove); });
   el.querySelectorAll('[data-lyrics]').forEach((b) => { b.onclick = openLyrics; });
   el.querySelectorAll('[data-fullsong]').forEach((b) => {
@@ -1016,7 +1082,30 @@ function renderMediaProgress(m) {
 
 // ---------- effects / text / look panels ----------
 const FX_KEYS = { flash: 'F', zoom: 'Z', shake: 'X', glitch: 'G', rgb: 'R', impact: 'I', twitch: 'T' };
-$('#fxGrid').innerHTML = Object.entries(FX).map(([k, d]) => `<button class="tile" data-fx="${k}"><span class="ti" style="background:${d.color}">${d.icon}</span><span class="tn">${d.label}</span><span class="tk">${FX_KEYS[k] ? 'Key ' + FX_KEYS[k] : d.sustained ? 'Sustained' : d.dur + 's'}</span></button>`).join('');
+let fxFilter = { q: '', cat: 'all' };
+(() => {
+  const grid = $('#fxGrid');
+  if (!grid || !grid.parentElement) return;
+  const bar = document.createElement('div');
+  bar.innerHTML = `<div class="field" style="margin-bottom:6px"><input type="text" id="fxSearch" placeholder="Search effects… (whip, parallax, clone, lut)"></div><div id="fxCats" class="fx-cats"></div>`;
+  grid.parentElement.insertBefore(bar, grid);
+})();
+function renderFxPalette() {
+  const catsEl = $('#fxCats');
+  if (catsEl) {
+    const entries = [['all', 'All'], ...Object.entries(FX_CATEGORIES).map(([k, c]) => [k, c.label])];
+    catsEl.innerHTML = entries.map(([k, l]) => `<button class="fx-cat-pill${fxFilter.cat === k ? ' active' : ''}" data-cat="${k}">${esc(l)}</button>`).join('');
+    catsEl.querySelectorAll('[data-cat]').forEach((b) => { b.onclick = () => { fxFilter.cat = b.dataset.cat; renderFxPalette(); }; });
+  }
+  const q = (fxFilter.q || '').trim().toLowerCase();
+  const allow = fxFilter.cat === 'all' ? null : new Set((FX_CATEGORIES[fxFilter.cat] || {}).types || []);
+  $('#fxGrid').innerHTML = Object.entries(FX)
+    .filter(([k, d]) => (!allow || allow.has(k)) && (!q || k.includes(q) || (d.label || '').toLowerCase().includes(q)))
+    .map(([k, d]) => `<button class="tile" data-fx="${k}"><span class="ti" style="background:${d.color}">${d.icon}</span><span class="tn">${d.label}</span><span class="tk">${FX_KEYS[k] ? 'Key ' + FX_KEYS[k] : d.sustained ? 'Sustained' : d.dur + 's'}</span></button>`)
+    .join('') || '<div class="empty-note">No matching effects.</div>';
+}
+if ($('#fxSearch')) $('#fxSearch').oninput = (e) => { fxFilter.q = e.target.value; renderFxPalette(); };
+renderFxPalette();
 $('#fxGrid').onclick = (e) => { const b = e.target.closest('[data-fx]'); if (b) addEffect(b.dataset.fx, app.player.t, true); };
 
 $('#textGrid').innerHTML = Object.entries(TEXT_STYLES).map(([k, s]) => `<button class="tile" data-ts="${k}"><span class="sample" style="font-family:'${s.font}';font-weight:${s.weight};${s.stroke ? `-webkit-text-stroke:1px ${s.stroke};` : ''}${s.glow ? `text-shadow:0 0 10px ${s.glow};` : ''}">${k === 'jp' ? '最強' : 'Aa'}</span><span class="tn">${s.label}</span></button>`).join('');
@@ -2828,7 +2917,8 @@ function renderLook() {
     ['FX boost'], ['vibrance', 'Vibrance', 0, 1, 0.01], ['fxGlow', 'Effect glow', 0, 1, 0.01],
   ];
   $('#lookSliders').innerHTML = rows.map((r) => r.length === 1 ? `<div class="section-title">${r[0]}</div>` : `<div class="slider-row"><span>${r[1]}</span><input type="range" min="${r[2]}" max="${r[3]}" step="${r[4]}" value="${look[r[0]] ?? 0}" data-k="${r[0]}"><output>${(+(look[r[0]] ?? 0)).toFixed(2)}</output></div>`).join('')
-    + `<div class="slider-row"><span>Duotone color</span><input type="color" id="duoColor" value="${rgbHex(look.duo || [1, 0.45, 0.1])}"><output></output></div>`;
+    + `<div class="slider-row"><span>Duotone color</span><input type="color" id="duoColor" value="${rgbHex(look.duo || [1, 0.45, 0.1])}"><output></output></div>`
+    + `<div class="ai-actions" style="margin-top:10px"><button class="btn small primary" id="lookAutoMatch">🎨 Auto Color-Match All Clips</button><button class="btn small" id="lookResetClips">Reset Clip Grades</button></div>`;
   $('#duoColor').onchange = (e) => {
     app.history.push();
     const n = parseInt(e.target.value.slice(1), 16);
@@ -2837,6 +2927,22 @@ function renderLook() {
     renderLook();
     app.player.invalidate();
   };
+  if ($('#lookAutoMatch')) {
+    $('#lookAutoMatch').onclick = () => {
+      app.history.push();
+      const n = autoColorMatch(app.project);
+      app.changed();
+      toast(n ? `Color-matched ${n} clips` : 'Analyze at least 2 clips first', !n);
+    };
+  }
+  if ($('#lookResetClips')) {
+    $('#lookResetClips').onclick = () => {
+      app.history.push();
+      for (const c of app.project.clips) delete c.grade;
+      app.changed();
+      toast('Per-clip grades cleared');
+    };
+  }
   $('#lookSliders').querySelectorAll('input').forEach((inp) => {
     inp.onpointerdown = () => app.history.push();
     inp.oninput = () => {
@@ -2852,6 +2958,7 @@ function findSel(sel) {
   const p = app.project;
   if (!sel) return null;
   if (sel.kind === 'fx') return p.effects.find((e) => e.id === sel.id);
+  if (sel.kind === 'ovl') return (p.overlays || []).find((e) => e.id === sel.id);
   if (sel.kind === 'text') return p.texts.find((e) => e.id === sel.id);
   if (sel.kind === 'clip') return p.clips.find((e) => e.id === sel.id);
   if (sel.kind === 'music') return p.music && p.music.mediaId === sel.id ? p.music : null;
@@ -2864,6 +2971,7 @@ function deleteSelection() {
   if (!sel || !findSel(sel)) return;
   app.history.push();
   if (sel.kind === 'fx') p.effects = p.effects.filter((e) => e.id !== sel.id);
+  if (sel.kind === 'ovl') p.overlays = (p.overlays || []).filter((e) => e.id !== sel.id);
   if (sel.kind === 'text') { if (findSel(sel).lyric) app.captionEdits = true; p.texts = p.texts.filter((e) => e.id !== sel.id); }
   if (sel.kind === 'clip') { p.clips = p.clips.filter((e) => e.id !== sel.id); relayout(p.clips); }
   if (sel.kind === 'music') p.music = null;
@@ -2923,7 +3031,7 @@ function sliderField(label, value, min, max, step, onInput, fmt = (v) => (+v).to
     const inp = document.getElementById(id);
     if (!inp) return;
     inp.onpointerdown = () => app.history.push();
-    inp.oninput = () => { onInput(+inp.value); inp.nextElementSibling.textContent = fmt(inp.value); app.player.invalidate(); app.timeline.render(); };
+    inp.oninput = () => { onInput(+inp.value); inp.nextElementSibling.textContent = fmt(inp.value); app.player.invalidate(); app.timeline.render(); if (app.gizmo) app.gizmo.render(); };
   });
   return `<div class="slider-row"><span>${esc(label)}</span><input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"><output>${fmt(value)}</output></div>`;
 }
@@ -2963,10 +3071,12 @@ function renderInspector() {
       else if (d.type === 'select') html += `<div class="field"><label>${esc(d.label)}</label><div class="seg">${d.options.map((o) => `<button data-seg="${k}" data-v="${o}" class="${o === v ? 'on' : ''}">${o}</button>`).join('')}</div></div>`;
       else html += sliderField(d.label, v, d.min, d.max, d.step, (x) => { obj.params[k] = x; if (obj.src !== 'manual') obj.src = 'manual'; });
     }
+    html += `<div class="field"><button class="btn small" id="iFxCurve">📈 Keyframe Intensity Curve</button></div>`;
     html += `<div class="insp-actions"><button class="btn small" id="iJump">▶ Preview</button><button class="btn small" id="iDup">Duplicate on next beat</button><button class="btn small danger" id="iDel">Delete</button></div>`;
     el.innerHTML = html;
     // a moved or restyled camera move re-aims at the character for its new span
     const retrack = () => { if (obj.type === 'camera') ensureFxMasks(); };
+    $('#iFxCurve').onclick = () => app.graphEditor.open({ type: 'fx', id: obj.id, prop: 'intensity' });
     $('#iType').onchange = (e) => { commitAnd(() => { obj.type = e.target.value; obj.params = defaultParams(obj.type); }); retrack(); };
     $('#iStart').onchange = (e) => { commitAnd(() => { obj.start = Math.max(0, +e.target.value); }); retrack(); };
     $('#iDur').onchange = (e) => { commitAnd(() => { obj.dur = Math.max(0.05, +e.target.value); }); retrack(); };
@@ -2989,13 +3099,65 @@ function renderInspector() {
     return;
   }
 
+  if (sel.kind === 'ovl') {
+    const m = getMedia(p, obj.mediaId);
+    const BLENDS = ['screen', 'normal', 'add', 'overlay', 'multiply'];
+    el.innerHTML = `<div class="insp-head"><div class="si" style="background:#38bdf8;color:#08101c">▣</div><div><h3>Overlay</h3><div class="sub">${esc(m ? m.name : 'missing')} · ${fmtTime(obj.start)}</div></div></div>
+      <div class="field-row"><div class="field"><label>Start (s)</label><input type="number" id="iStart" step="0.01" min="0" value="${obj.start.toFixed(2)}"></div>
+      <div class="field"><label>Duration (s)</label><input type="number" id="iDur" step="0.01" min="0.1" value="${obj.dur.toFixed(2)}"></div></div>
+      <div class="field"><label>Blend Mode</label><div class="seg">${BLENDS.map((b) => `<button data-blend="${b}" class="${(obj.blend || 'screen') === b ? 'on' : ''}">${b}</button>`).join('')}</div></div>
+      <div class="sliders" style="margin:0 0 12px">
+        ${sliderField('Opacity', obj.opacity ?? 1, 0, 1, 0.01, (v) => { obj.opacity = v; })}
+        ${sliderField('Scale', obj.scale ?? 1, 0.1, 3.5, 0.01, (v) => { obj.scale = v; })}
+        ${sliderField('Position X', obj.x ?? 0.5, 0, 1, 0.01, (v) => { obj.x = v; })}
+        ${sliderField('Position Y', obj.y ?? 0.5, 0, 1, 0.01, (v) => { obj.y = v; })}
+        ${sliderField('Rotation', Math.round(((obj.rot || 0) * 180) / Math.PI), -180, 180, 1, (v) => { obj.rot = (v * Math.PI) / 180; }, (v) => `${Math.round(v)}°`)}
+      </div>
+      <label class="toggle" style="margin:0 0 8px"><input type="checkbox" id="iLumaKey" ${obj.lumaKey ? 'checked' : ''}><span>Luma Key (remove black bg)</span></label>
+      <label class="toggle" style="margin:0 0 12px"><input type="checkbox" id="iOvlBehind" ${obj.behind ? 'checked' : ''}><span>Behind Subject (requires matte)</span></label>
+      <div class="insp-actions"><button class="btn small danger" id="iDel">Delete</button></div>`;
+    $('#iStart').onchange = (e) => commitAnd(() => { obj.start = Math.max(0, +e.target.value); });
+    $('#iDur').onchange = (e) => commitAnd(() => { obj.dur = Math.max(0.1, +e.target.value); });
+    el.querySelectorAll('[data-blend]').forEach((b) => { b.onclick = () => commitAnd(() => { obj.blend = b.dataset.blend; }); });
+    $('#iLumaKey').onchange = (e) => commitAnd(() => { obj.lumaKey = e.target.checked; });
+    $('#iOvlBehind').onchange = (e) => commitAnd(() => { obj.behind = e.target.checked; });
+    $('#iDel').onclick = deleteSelection;
+    return;
+  }
+
   if (sel.kind === 'text') {
+    const curFont = obj.font || (TEXT_STYLES[obj.style] && TEXT_STYLES[obj.style].font) || TEXT_FONTS[0];
+    const hasGrad = Array.isArray(obj.gradient) && obj.gradient.length >= 2;
+    const letters = Array.isArray(obj.letters) ? obj.letters : null;
     el.innerHTML = `<div class="insp-head"><div class="si" style="background:#a855f7;color:#fff">T</div><div><h3>Text</h3><div class="sub">${fmtTime(obj.start)} · ${obj.dur.toFixed(2)}s</div></div></div>
       <div class="field"><label>Text</label><textarea id="iText">${esc(obj.text)}</textarea></div>
+      <div class="field"><label>Font</label><select id="iFont">${TEXT_FONTS.map((f) => `<option value="${esc(f)}" ${f === curFont ? 'selected' : ''}>${esc(f)}</option>`).join('')}</select></div>
       <div class="field"><label>Style</label><div class="seg">${Object.entries(TEXT_STYLES).map(([k, s]) => `<button data-style="${k}" class="${k === obj.style ? 'on' : ''}">${esc(s.label)}</button>`).join('')}</div></div>
       <div class="field"><label>Animation</label><div class="seg">${Object.entries(TEXT_ANIMS).map(([k, l]) => `<button data-anim="${k}" class="${k === obj.anim ? 'on' : ''}">${esc(l)}</button>`).join('')}</div></div>
-      <div class="sliders" style="margin:0 0 12px">${sliderField('Size', obj.size, 0.03, 0.3, 0.005, (v) => { obj.size = v; })}${sliderField('Position', obj.y, 0.05, 0.95, 0.01, (v) => { obj.y = v; })}</div>
-      <div class="field-row"><div class="field"><label>Color</label><input type="color" id="iColor" value="${obj.color || '#ffffff'}"></div><div></div></div>
+      <div class="sliders" style="margin:0 0 12px">
+        ${sliderField('Size', obj.size, 0.03, 0.35, 0.005, (v) => { obj.size = v; })}
+        ${sliderField('Pos X', obj.x ?? 0.5, 0.05, 0.95, 0.01, (v) => { obj.x = v; })}
+        ${sliderField('Pos Y', obj.y ?? 0.5, 0.05, 0.95, 0.01, (v) => { obj.y = v; })}
+        ${sliderField('Rotation', Math.round(((obj.rot || 0) * 180) / Math.PI), -180, 180, 1, (v) => { obj.rot = (v * Math.PI) / 180; }, (v) => `${Math.round(v)}°`)}
+        ${sliderField('3D Tilt', obj.persp || 0, -0.45, 0.45, 0.01, (v) => { obj.persp = v; })}
+        ${sliderField('Tracking', obj.tracking ?? 0, -0.05, 0.4, 0.005, (v) => { obj.tracking = v; })}
+        ${sliderField('Split Gap', obj.splitGap || 0, 0, 0.45, 0.005, (v) => { obj.splitGap = v; })}
+        ${sliderField('Stroke W', obj.strokeW ?? 0, 0, 0.25, 0.005, (v) => { obj.strokeW = v; })}
+        ${sliderField('Glow', obj.glowAmt ?? 0, 0, 1, 0.02, (v) => { obj.glowAmt = v; })}
+      </div>
+      <div class="field-row" style="margin-bottom:8px">
+        <div class="field"><label>Fill</label><input type="color" id="iColor" value="${obj.color || '#ffffff'}"></div>
+        <div class="field"><label>Stroke / Glow</label><div style="display:flex;gap:6px"><input type="color" id="iStrokeCol" value="${obj.strokeColor || '#000000'}" title="Stroke color"><input type="color" id="iGlowCol" value="${obj.glowColor || '#ff4d8d'}" title="Glow color"></div></div>
+      </div>
+      <label class="toggle" style="margin:0 0 8px"><input type="checkbox" id="iGradOn" ${hasGrad ? 'checked' : ''}><span>Two-tone gradient fill</span></label>
+      ${hasGrad ? `<div class="field-row" style="margin-bottom:8px"><div class="field"><label>Top</label><input type="color" id="iGradA" value="${obj.gradient[0]}"></div><div class="field"><label>Bottom</label><input type="color" id="iGradB" value="${obj.gradient[1]}"></div></div>` : ''}
+      <label class="toggle" style="margin:0 0 8px"><input type="checkbox" id="iBehind" ${obj.behind ? 'checked' : ''}><span>Place behind character (depth)</span></label>
+      <div class="section-title">Per-Letter Lock Mode</div>
+      <div class="ai-actions" style="margin-bottom:8px">
+        <button class="btn small" id="iLettersToggle">${letters ? 'Exit Per-Letter Mode' : 'Split into Per-Letter Handles'}</button>
+        ${letters ? '<button class="btn small" id="iLettersReset">Reset Letters</button>' : ''}
+      </div>
+      ${letters ? `<div class="field" style="max-height:130px;overflow:auto">${letters.map((L, idx) => `<div style="display:grid;grid-template-columns:24px 1fr auto;gap:6px;align-items:center;margin-bottom:4px;font-size:11px"><b>${esc(L.ch)}</b><input type="number" data-ldel="${idx}" min="0" max="2" step="0.02" value="${(L.delay || 0).toFixed(2)}" title="Delay (s)"><label><input type="checkbox" data-lhid="${idx}" ${L.hidden ? 'checked' : ''}> hide</label></div>`).join('')}</div>` : ''}
       <div class="field-row"><div class="field"><label>Start (s)</label><input type="number" id="iStart" step="0.01" min="0" value="${obj.start.toFixed(2)}"></div>
       <div class="field"><label>Duration (s)</label><input type="number" id="iDur" step="0.01" min="0.1" value="${obj.dur.toFixed(2)}"></div></div>
       <div class="insp-actions"><button class="btn small danger" id="iDel">Delete</button></div>`;
@@ -3004,16 +3166,27 @@ function renderInspector() {
     ta.oninput = () => {
       obj.text = ta.value; obj.src = 'manual';
       if (obj.lyric) app.captionEdits = true;
-      // a build-up line keeps its word timing while the word count matches
       if (obj.words) {
         const ws = ta.value.trim().split(/\s+/);
         if (ws.length === obj.words.length) ws.forEach((w, i) => { obj.words[i].text = w; }); else delete obj.words;
       }
-      app.player.invalidate(); app.timeline.render();
+      app.player.invalidate(); app.timeline.render(); if (app.gizmo) app.gizmo.render();
     };
+    $('#iFont').onchange = (e) => commitAnd(() => { obj.font = e.target.value; });
     el.querySelectorAll('[data-style]').forEach((b) => { b.onclick = () => commitAnd(() => { obj.style = b.dataset.style; }); });
     el.querySelectorAll('[data-anim]').forEach((b) => { b.onclick = () => commitAnd(() => { obj.anim = b.dataset.anim; }); });
     $('#iColor').onchange = (e) => commitAnd(() => { obj.color = e.target.value; });
+    $('#iStrokeCol').onchange = (e) => commitAnd(() => { obj.strokeColor = e.target.value; if (!obj.strokeW) obj.strokeW = 0.06; });
+    $('#iGlowCol').onchange = (e) => commitAnd(() => { obj.glowColor = e.target.value; if (!obj.glowAmt) obj.glowAmt = 0.55; });
+    $('#iGradOn').onchange = (e) => commitAnd(() => { if (e.target.checked) obj.gradient = [obj.color || '#ffffff', '#ff4d8d']; else delete obj.gradient; });
+    if ($('#iGradA')) $('#iGradA').onchange = (e) => commitAnd(() => { obj.gradient = [e.target.value, obj.gradient[1]]; });
+    if ($('#iGradB')) $('#iGradB').onchange = (e) => commitAnd(() => { obj.gradient = [obj.gradient[0], e.target.value]; });
+    $('#iBehind').onchange = (e) => commitAnd(() => { obj.behind = e.target.checked; });
+    const initLetters = () => [...(obj.text || '')].map((ch, i, a) => ({ ch, dx: +((i - (a.length - 1) / 2) * (obj.size || 0.12) * 0.72).toFixed(4), dy: 0, scale: 1, rot: 0, delay: +(i * 0.035).toFixed(3), hidden: false }));
+    $('#iLettersToggle').onclick = () => commitAnd(() => { if (Array.isArray(obj.letters)) delete obj.letters; else obj.letters = initLetters(); });
+    if ($('#iLettersReset')) $('#iLettersReset').onclick = () => commitAnd(() => { obj.letters = initLetters(); });
+    el.querySelectorAll('[data-ldel]').forEach((inp) => { inp.onchange = (e) => commitAnd(() => { obj.letters[+inp.dataset.ldel].delay = Math.max(0, +e.target.value); }); });
+    el.querySelectorAll('[data-lhid]').forEach((chk) => { chk.onchange = (e) => commitAnd(() => { obj.letters[+chk.dataset.lhid].hidden = e.target.checked; }); });
     $('#iStart').onchange = (e) => commitAnd(() => { obj.start = Math.max(0, +e.target.value); });
     $('#iDur').onchange = (e) => commitAnd(() => { obj.dur = Math.max(0.1, +e.target.value); });
     $('#iDel').onclick = deleteSelection;
@@ -3028,17 +3201,109 @@ function renderInspector() {
     const { w, h } = formatSize(p);
     const canPan = m && m.w / m.h > (w / h) * 1.05;
     const panC = obj.pan ? (obj.pan[0] + obj.pan[1]) / 2 : 0.5;
+    const g = obj.grade || {};
+    const clipIdx = p.clips.indexOf(obj);
+    const kfRow = (label, prop) => {
+      const keyed = prop === 'speed' ? (obj.speedKeys && obj.speedKeys.some((k) => !Array.isArray(k))) : !!(obj.kf && obj.kf[prop]);
+      return `<button class="ge-pre${keyed ? ' active' : ''}" data-kf="${prop}" title="Edit ${label} curve">📈 ${label}</button>`;
+    };
     el.innerHTML = `<div class="insp-head"><div class="si" style="background:#fbbf24">▶</div><div><h3>Clip</h3><div class="sub">${esc(m ? m.name : 'missing')} · ${fmtTime(obj.srcIn)}–${fmtTime(obj.srcIn + span)}</div></div></div>
       <div class="field"><label>Speed</label><div class="seg">${Object.entries(SPEEDS).map(([k, s]) => `<button data-speed="${k}" class="${k === cur ? 'on' : ''}">${s.label}</button>`).join('')}</div>${cur ? '' : '<div class="sub" style="color:var(--muted);font-size:11px">Custom ramp</div>'}</div>
+      <div class="field"><label>Keyframe Curves</label><div class="ge-presets">${kfRow('Speed', 'speed')}${kfRow('Zoom', 'zoom')}${kfRow('Pan X', 'panX')}${kfRow('Pan Y', 'panY')}${kfRow('Rot', 'rot')}${kfRow('Exposure', 'exposure')}</div></div>
       <div class="sliders" style="margin:0 0 12px">
         ${m ? sliderField('Source in', obj.srcIn, 0, Math.max(0.01, m.duration - span), 0.01, (v) => { obj.srcIn = v; }, (v) => fmtTime(+v)) : ''}
-        ${canPan ? sliderField('Reframe X', panC, 0, 1, 0.01, (v) => { obj.pan = [v, v]; }) : ''}
-        ${sliderField('Zoom', obj.zoom || 1, 1, 2, 0.01, (v) => { obj.zoom = v; })}
+        ${canPan ? sliderField('Reframe X', panC, 0, 1, 0.01, (v) => { obj.pan = [v, v]; obj.focus = v; }) : ''}
+        ${sliderField('Pan Y', obj.panY ?? 0.5, 0.05, 0.95, 0.01, (v) => { obj.panY = v; })}
+        ${sliderField('Zoom', obj.zoom || 1, 1, 2.5, 0.01, (v) => { obj.zoom = v; })}
+        ${sliderField('Rotation', Math.round(((obj.rot || 0) * 180) / Math.PI), -180, 180, 1, (v) => { obj.rot = (v * Math.PI) / 180; }, (v) => `${Math.round(v)}°`)}
         ${m ? sliderField('Clip audio', obj.volume || 0, 0, 1.5, 0.01, (v) => { obj.volume = v; }) : ''}
       </div>
-      <p class="hint" style="margin-top:-4px">Raise <b>Clip audio</b> to play the clip's own sound (a character line before the drop). The song ducks under it.</p>
+      <label class="toggle" style="margin:0 0 10px"><input type="checkbox" id="iMirror" ${obj.mirror ? 'checked' : ''}><span>Mirror horizontal</span></label>
+      <div class="section-title">Per-Clip Color Grade</div>
+      <div class="sliders" style="margin:0 0 8px">
+        ${sliderField('Exposure', g.exposure || 0, -1, 1, 0.01, (v) => { obj.grade = { ...(obj.grade || {}), exposure: v }; })}
+        ${sliderField('Contrast', g.contrast ?? 1, 0.5, 1.6, 0.01, (v) => { obj.grade = { ...(obj.grade || {}), contrast: v }; })}
+        ${sliderField('Saturation', g.saturation ?? 1, 0, 2, 0.01, (v) => { obj.grade = { ...(obj.grade || {}), saturation: v }; })}
+        ${sliderField('Temp', g.temperature || 0, -0.5, 0.5, 0.01, (v) => { obj.grade = { ...(obj.grade || {}), temperature: v }; })}
+      </div>
+      <div class="ai-actions" style="margin-bottom:10px">
+        ${clipIdx > 0 ? '<button class="btn small" id="iMatchPrev">🎨 Match Prev Clip</button><button class="btn small" id="iMatchCut">⚡ Match-Cut Align</button>' : ''}
+        <button class="btn small" id="iGradeReset">Reset Grade</button>
+      </div>
+      ${Array.isArray(obj.alts) && obj.alts.length ? `<div class="field"><label>Shot Swapper (alternates)</label><div class="swap-grid" id="iSwapGrid">${obj.alts.slice(0, 6).map((a, idx) => `<button class="swap-tile" data-alt="${idx}" title="${esc(a.reason || 'alt')} · score ${a.score}"><span>${fmtTime(a.srcIn)}</span></button>`).join('')}</div></div>` : ''}
       ${canPan && m.analysis ? '<div class="field"><button class="btn small" id="iFollow">⛶ Follow the action</button></div>' : ''}
       <div class="insp-actions"><button class="btn small" id="iSplit">✂ Split at playhead</button><button class="btn small danger" id="iDel">Delete</button></div>`;
+    el.querySelectorAll('[data-kf]').forEach((b) => { b.onclick = () => app.graphEditor.open({ type: 'clip', id: obj.id, prop: b.dataset.kf }); });
+    $('#iMirror').onchange = (e) => commitAnd(() => { obj.mirror = e.target.checked; });
+    if ($('#iMatchPrev')) {
+      $('#iMatchPrev').onclick = () => commitAnd(() => {
+        const prev = p.clips[clipIdx - 1];
+        const pm = prev && getMedia(p, prev.mediaId);
+        if (!pm || !pm.analysis?.grid || !m || !m.analysis?.grid) { toast('Analyze footage first to match levels', true); return; }
+        const l0 = gridMean(pm.analysis.grid, 'pl', prev.srcIn, prev.srcIn + clipSpan(prev));
+        const l1 = gridMean(m.analysis.grid, 'pl', obj.srcIn, obj.srcIn + span);
+        const s0 = pm.analysis.grid.ps ? gridMean(pm.analysis.grid, 'ps', prev.srcIn, prev.srcIn + clipSpan(prev)) : 0.3;
+        const s1 = m.analysis.grid.ps ? gridMean(m.analysis.grid, 'ps', obj.srcIn, obj.srcIn + span) : 0.3;
+        obj.grade = {
+          ...(obj.grade || {}),
+          exposure: +clamp((l0 - l1) * 1.4, -0.5, 0.5).toFixed(3),
+          saturation: +clamp(s0 > 0.04 && s1 > 0.04 ? s0 / s1 : 1, 0.75, 1.35).toFixed(3),
+        };
+      });
+    }
+    if ($('#iMatchCut')) {
+      $('#iMatchCut').onclick = () => commitAnd(() => {
+        const prev = p.clips[clipIdx - 1];
+        const pm = prev && getMedia(p, prev.mediaId);
+        const outPose = extractPose(pm, (prev.srcIn || 0) + Math.max(0, clipSpan(prev) - 0.05));
+        const inPose = extractPose(m, obj.srcIn);
+        const pair = scorePosePair(outPose, inPose);
+        const al = computeAlignTransform(outPose, inPose, pair.mirrorRecommended);
+        obj.mirror = al.mirror;
+        obj.pan = [al.panX, al.panX];
+        obj.panY = al.panY;
+        obj.zoom = al.zoom;
+        toast(`Match-cut aligned (${Math.round(pair.score * 100)}% fit${al.mirror ? ', mirrored' : ''})`);
+      });
+    }
+    $('#iGradeReset').onclick = () => commitAnd(() => { delete obj.grade; });
+    if ($('#iSwapGrid')) {
+      const tiles = [...el.querySelectorAll('[data-alt]')];
+      tiles.forEach((b) => {
+        b.onclick = () => commitAnd(() => {
+          const a = obj.alts[+b.dataset.alt];
+          if (!a) return;
+          const prevCut = { mediaId: obj.mediaId, srcIn: obj.srcIn, score: 0, reason: 'prev' };
+          obj.mediaId = a.mediaId;
+          obj.srcIn = a.srcIn;
+          obj.alts[+b.dataset.alt] = prevCut;
+        });
+      });
+      (async () => {
+        const cache = (window._altThumbs = window._altThumbs || new Map());
+        for (const b of tiles) {
+          if (!b.isConnected) return;
+          const a = obj.alts[+b.dataset.alt];
+          const am = a && getMedia(p, a.mediaId);
+          if (!am || am.kind !== 'video') continue;
+          const key = `${am.id}|${a.srcIn.toFixed(2)}`;
+          let url = cache.get(key);
+          if (!url) {
+            try {
+              const v = await loadVideoMeta(am.url);
+              url = await makeThumb(v, Math.min(Math.max(0, a.srcIn), Math.max(0, am.duration - 0.05)));
+              v.removeAttribute('src'); v.load();
+              if (url) cache.set(key, url);
+            } catch {}
+          }
+          if (url && b.isConnected) {
+            const img = document.createElement('img');
+            img.src = url;
+            b.prepend(img);
+          }
+        }
+      })();
+    }
     // decode the clip's own audio the first time someone reaches for the Clip audio slider
     const audioRow = [...el.querySelectorAll('.slider-row')].find((r) => r.firstElementChild.textContent === 'Clip audio');
     if (audioRow && m && !m.audio) {

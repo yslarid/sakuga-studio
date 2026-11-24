@@ -1,6 +1,6 @@
 # Sakuga Studio
 
-Sakuga Studio is a browser-based video editor for cutting footage to music. Drop in a clip and a song, and the editor proposes cuts against the beat grid. You can move a cut, change its speed, layer text over the frame, and export the result as an MP4.
+Sakuga Studio is a browser-based video editor for cutting footage to music. Drop in clips, overlays, and a song, and the editor proposes beat-synced cuts, speed ramps, and match-cut transitions. You can sculpt Bezier motion and speed curves, transform clips and text directly on the preview canvas, composite blend-mode overlays, inspect pre-flight QA checks, and export an H.264 MP4 with WebCodecs.
 
 ![The Afterlight example open in Sakuga Studio, with the preview above the editable timeline.](docs/editor.png)
 
@@ -22,11 +22,12 @@ Select **Open example** to load *Afterlight*, a four-second animation, and its o
 
 | If you’re interested in… | Start here |
 | --- | --- |
-| How a song becomes an edit | The [audio worker](js/analysis/audio-worker.js) finds beats and changes in energy. The [edit planner](js/engine/autoedit.js) matches those timings to scenes and proposes cuts. |
-| What happens when you move a clip | The [timeline](js/ui/timeline.js) updates the [project state](js/state.js), including source timing, speed curves, and undo history. |
-| How the preview becomes an MP4 | The [WebGL2 renderer](js/render/renderer.js) composites each frame. The [exporter](js/export/exporter.js) renders at the selected frame rate and passes the frames to WebCodecs for encoding. |
-| How captions follow speech | The [caption pipeline](js/lyrics.js) aligns words to the audio. The [text layer](js/render/text.js) draws them at the playhead. |
-| Working with media from the command line | The [local tools guide](docs/local-tools.md) covers the optional Python utilities, their inputs, and their dependencies. |
+| How a song becomes an edit | The [audio worker](js/analysis/audio-worker.js) finds beats and changes in energy. The [edit planner](js/engine/autoedit.js) and [match-cut matcher](js/engine/matchcut.js) pair those timings with pose, motion, and color continuity across 13 edit styles (including *Match-Cut Flow*, *Character Showcase*, and *3D Depth Lyric*). |
+| Curves, keyframes, and direct manipulation | The [curve evaluator](js/curves.js) drives cubic Bezier velocity ramps and per-clip transform keyframes. The [graph editor](js/ui/graph-editor.js) edits keyframes and handles in a collapsible drawer, and the [canvas gizmo](js/ui/canvas-gizmo.js) supports drag, scale, rotate, and per-letter depth positioning on the preview. |
+| What happens when you move a clip | The [timeline](js/ui/timeline.js) updates the [project state](js/state.js), including source timing, blend-mode overlay tracks (`OVL`), speed curves, and undo history. |
+| Effects, grading, and MP4 export | The [effects catalog](js/effects.js) defines 59 GPU effects and camera/transition presets rendered by the [WebGL2 compositor](js/render/renderer.js). The [exporter](js/export/exporter.js) composites video, overlays, and text at the chosen format (including `5:4` and source-matched aspect) and encodes via WebCodecs. |
+| How captions and 3D text follow speech | The [caption pipeline](js/lyrics.js) aligns words to the audio. The [text layer](js/render/text.js) renders styled titles, perspective warps, and per-letter depth lockups at the playhead. |
+| Pre-flight checks and local media tools | The [QA panel](js/ui/qa-panel.js) flags pacing, exposure, transition, and match-cut issues with one-click fixes in the browser. The [local tools guide](docs/local-tools.md) covers optional Python utilities, their inputs, and their dependencies. |
 
 You can also inspect a finished render for repeated frames and jumps in camera motion. Install FFmpeg on your path, then run the optical-flow audit on a short segment.
 

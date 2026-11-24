@@ -1,5 +1,6 @@
 // Effect registry, effect evaluation at a point in time, and color looks.
 import { clamp } from './state.js';
+import { evalCurve } from './curves.js';
 
 const I = (def = 0.7, label = 'Intensity') => ({ min: 0, max: 1, step: 0.05, def, label });
 const SEL = (label, options, def = options[0]) => ({ type: 'select', label, options, def });
@@ -36,7 +37,7 @@ export const FX = {
   strobe: { label: 'Strobe', icon: '✺', color: '#fde047', dur: 1, params: { intensity: I(0.6), rate: { min: 2, max: 16, step: 1, def: 8, label: 'Flashes / sec' } } },
   invert: { label: 'Invert', icon: '◑', color: '#e5e7eb', dur: 0.15, params: { intensity: I(1) } },
   camera: { label: 'Camera Move', icon: '🎥', color: '#10b981', dur: 2, sustained: true, params: { intensity: I(0.7), mode: SEL('Style', ['follow', 'push', 'lock', 'handheld', 'ladder']), from: { min: 0, max: 0.9, step: 0.05, def: 0, label: 'Starts moving at' } } },
-  vfx: { label: 'VFX Overlay', icon: '✨', color: '#f59e0b', dur: 1, params: { asset: { type: 'vfx', label: 'Effect', def: '' }, intensity: I(0.9), size: { min: 0.1, max: 1.8, step: 0.05, def: 0.6, label: 'Size' }, x: I(0.5, 'Aim X'), y: I(0.5, 'Aim Y'), rot: { min: -180, max: 180, step: 5, def: 0, label: 'Rotation' }, speed: { min: 0.5, max: 2, step: 0.05, def: 1, label: 'Speed' }, tint: { type: 'color', def: '#ffffff', label: 'Tint' }, tintAmt: I(0, 'Tint amount'), behind: SEL('Layer', ['front', 'behind']), fade: { min: 0, max: 0.6, step: 0.01, def: 0.03, label: 'Fade (s)' } } },
+  vfx: { label: 'VFX Overlay', icon: '✨', color: '#f59e0b', dur: 1, params: { asset: { type: 'vfx', label: 'Effect', def: '' }, blend: SEL('Blend', ['auto', 'screen', 'add', 'normal', 'overlay', 'multiply']), intensity: I(0.9), size: { min: 0.1, max: 1.8, step: 0.05, def: 0.6, label: 'Size' }, x: I(0.5, 'Aim X'), y: I(0.5, 'Aim Y'), rot: { min: -180, max: 180, step: 5, def: 0, label: 'Rotation' }, speed: { min: 0.5, max: 2, step: 0.05, def: 1, label: 'Speed' }, tint: { type: 'color', def: '#ffffff', label: 'Tint' }, tintAmt: I(0, 'Tint amount'), behind: SEL('Layer', ['front', 'behind']), fade: { min: 0, max: 0.6, step: 0.01, def: 0.03, label: 'Fade (s)' } } },
   muffle: { label: 'Song Muffle', icon: '◖', color: '#64748b', dur: 1.2, params: { intensity: I(1, 'Amount') } },
   bassout: { label: 'Bass Cut', icon: '◗', color: '#64748b', dur: 1, params: { intensity: I(1, 'Amount') } },
   mute: { label: 'Silence', icon: '◌', color: '#334155', dur: 0.08, params: { intensity: I(1, 'Amount') } },
@@ -60,6 +61,22 @@ export const FX = {
   keys: { label: 'Keyframed Look', icon: '≈', color: '#7dd3fc', dur: 1, params: { intensity: I(1) } },
   // a white plate half the frame high, stepping across a cut in two frames (docs/refs/group-I.md)
   whitebar: { label: 'White Bar', icon: '▬', color: '#f8fafc', dur: 0.067, params: { intensity: I(1), direction: SEL('Direction', ['down', 'up']) } },
+  whipcam: { label: 'Two-Stage Whip Cam', icon: '⇆', color: '#38bdf8', dur: 0.75, params: { intensity: I(1), direction: SEL('Direction', ['left', 'right', 'up', 'down']), whipAmt: { min: 0, max: 0.2, step: 0.005, def: 0.04, label: 'Whip offset' }, settlePct: { min: 0.05, max: 0.5, step: 0.01, def: 0.15, label: 'Settle share' }, creepZoom: { min: 0, max: 0.2, step: 0.005, def: 0.045, label: 'Creep zoom' }, driftX: { min: -0.05, max: 0.05, step: 0.002, def: 0.012, label: 'Drift X' }, driftY: { min: -0.05, max: 0.05, step: 0.002, def: 0, label: 'Drift Y' }, smear: I(0.85, 'Whip smear') } },
+  parallax: { label: '2.5D Parallax', icon: '◫', color: '#22d3ee', dur: 1.5, params: { intensity: I(1), fgScale: { min: 0.95, max: 1.25, step: 0.01, def: 1.08, label: 'Subject zoom' }, bgScale: { min: 0.85, max: 1.15, step: 0.01, def: 1.02, label: 'BG zoom' }, bgBlur: { min: 0, max: 0.03, step: 0.001, def: 0.008, label: 'BG blur' }, bgDark: I(0.25, 'BG darken') } },
+  clone: { label: 'Subject Clone', icon: '❖', color: '#f472b6', dur: 1.2, params: { intensity: I(0.35), scale: { min: 1.02, max: 1.6, step: 0.02, def: 1.22, label: 'Scale' }, blur: { min: 0, max: 0.08, step: 0.005, def: 0.025, label: 'Radial blur' }, glow: I(0.45, 'Rim glow'), color: { type: 'color', def: '#ff9a2e', label: 'Glow color' }, pivotX: I(0.5, 'Pivot X'), pivotY: I(0.75, 'Pivot Y') } },
+  dof: { label: 'Subject DoF', icon: '◉', color: '#60a5fa', dur: 1.5, sustained: true, params: { intensity: I(0.7, 'Blur'), bgDark: I(0.2, 'BG darken') } },
+  rim: { label: 'Rim & Edge CA', icon: '◈', color: '#c084fc', dur: 0.9, params: { intensity: I(0.85), caEdge: { min: 0, max: 0.02, step: 0.001, def: 0.006, label: 'Edge CA' }, iris: I(0.35, 'Iris bloom'), sweep: I(0.75, 'Sweep light'), color: { type: 'color', def: '#7dd3fc', label: 'Tint' } } },
+  colorlut: { label: 'Dark S-Curve Grade', icon: '◐', color: '#fb7185', dur: 2, sustained: true, params: { intensity: I(0.9), crush: { min: -0.08, max: 0.2, step: 0.01, def: 0.03, label: 'Crush/Lift' }, clamp: { min: 0.65, max: 1, step: 0.01, def: 0.88, label: 'Highlight clamp' }, tint: I(0.25, 'Shadow tint'), duo: I(0.15, 'Duo blend'), color: { type: 'color', def: '#ff6b3d', label: 'Hue' }, vignette: I(0.38, 'Vignette') } },
+  adjust: { label: 'Adjustment Layer', icon: '▤', color: '#34d399', dur: 2, sustained: true, params: { intensity: I(1), exposure: { min: -1, max: 1, step: 0.02, def: 0, label: 'Exposure' }, contrast: { min: 0.5, max: 1.6, step: 0.02, def: 1, label: 'Contrast' }, saturation: { min: 0, max: 2, step: 0.02, def: 1, label: 'Saturation' }, temp: { min: -0.6, max: 0.6, step: 0.02, def: 0, label: 'Temp' }, bloom: I(0, 'Bloom'), rgb: I(0, 'RGB split'), vignette: I(0, 'Vignette') } },
+};
+
+export const FX_CATEGORIES = {
+  hits: { label: 'Hits', types: ['flash', 'zoom', 'shake', 'twitch', 'impact', 'rgb', 'glitch', 'smash', 'sweep', 'expstrobe', 'fadechain', 'strobe', 'invert', 'bwflash', 'blackout'] },
+  transitions: { label: 'Transitions', types: ['zoomblur', 'whip', 'spin', 'echo', 'defocus', 'blurdip', 'dipblack', 'whiteout', 'tiles', 'smear', 'dissolve', 'whitedissolve', 'whitebar', 'preview', 'fgwipe', 'fadein', 'fadeout'] },
+  camera: { label: 'Camera', types: ['whipcam', 'camera', 'slowzoom', 'tilt', 'warp', 'stutter'] },
+  depth: { label: 'Depth & 2.5D', types: ['parallax', 'clone', 'dof', 'rim', 'aura', 'glint', 'vfx'] },
+  grade: { label: 'Grade & Glow', types: ['colorlut', 'adjust', 'flare', 'energy', 'speedlines', 'pulse', 'bw', 'natural', 'letterbox', 'keys'] },
+  audio: { label: 'Audio', types: ['muffle', 'bassout', 'mute', 'songcut'] },
 };
 
 export function defaultParams(type) {
@@ -113,7 +130,7 @@ export function fxState(effects, t, fps = 24) {
     rgb: 0, glitch: 0, seed: 0, zoomBlur: 0, dirBlur: [0, 0],
     invert: 0, bars: 0, bw: 0, black: 0,
     impact: 0, impactMode: 0, warp: 0, warpMode: 1, defocus: 0,
-    exposure: 0, sat: 0, echo: 0, speedlines: 0, tilt: [0, 0], flare: 0, energy: 0,
+    exposure: 0, contrast: 1, sat: 0, echo: 0, speedlines: 0, tilt: [0, 0], flare: 0, energy: 0,
     smash: null, shock: null, hold: null, aura: null, cam: null, vfx: [], sweep: null, sharpSubj: 0, preview: null, glint: 0, glintAge: 0, unduo: 0, temp: 0, bloom: 0, dissolve: 0, dissolveId: null,
     tone: 0, toneColor: [1, 1, 1], vig: 0, shade: 0, shadeScale: 1, shadeX: 0, shadeY: 0, shadeColor: [0.3, 0.3, 0.4], dof: 0, clone: 0, cloneScale: 1.2, cloneBlur: 0, cloneGlow: 0, cloneColor: [1, 0.6, 0.2], clonePivot: [0.5, 0.75], bgDark: 0, lut: 0, lutCrush: 0, lutClamp: 0.85, lutTint: 0, lutColor: [1, 0.6, 0.2], lutDuo: 0, wb: [1, 1, 1], ghost: 0, ghostScale: 1, ghostFringe: 0, stack: 0, comb: 0, bar: 0, flashUnder: 0, plate: 0, crush: 0, lift: 0,
     iris: 0, irisR: 18 / 1080, irisColor: [1, 1, 1], eyeA: null, eyeB: null,
@@ -122,7 +139,15 @@ export function fxState(effects, t, fps = 24) {
   for (const e of effects) {
     if (t < e.start || t >= e.start + e.dur) continue;
     const p = (t - e.start) / e.dur;
-    const P = e.params || {};
+    const P0 = e.params || {};
+    let P = P0;
+    if (e.kf) {
+      const ov = {};
+      for (const [key, keys] of Object.entries(e.kf)) {
+        if (Array.isArray(keys) && keys.length) ov[key] = evalCurve(keys, p, P0[key] ?? (key === 'intensity' ? 1 : 0));
+      }
+      P = { ...P0, ...ov };
+    }
     const k = P.intensity ?? 1;
     switch (e.type) {
       case 'flash': {
@@ -385,7 +410,7 @@ export function fxState(effects, t, fps = 24) {
         if (!P.asset || P.off) break;
         const age = t - e.start, fd = P.fade ?? 0.03;
         const env = Math.min(1, fd > 0 ? age / fd : 1, fd > 0 ? (e.dur - age) / Math.max(fd, 0.05) : 1);
-        s.vfx.push({ id: P.asset, age, p, k: k * Math.max(0, env), x: P.x ?? 0.5, y: P.y ?? 0.5, size: P.size ?? 0.6, rot: ((P.rot || 0) * Math.PI) / 180, speed: P.speed || 1, tint: P.tint, tintAmt: P.tintAmt || 0, behind: P.behind === 'behind', flip: !!P.flip });
+        s.vfx.push({ id: P.asset, age, p, k: k * Math.max(0, env), x: P.x ?? 0.5, y: P.y ?? 0.5, size: P.size ?? 0.6, rot: ((P.rot || 0) * Math.PI) / 180, speed: P.speed || 1, tint: P.tint, tintAmt: P.tintAmt || 0, behind: P.behind === 'behind', flip: !!P.flip, blend: P.blend || 'auto' });
         break;
       }
       case 'preview':
@@ -602,6 +627,77 @@ export function fxState(effects, t, fps = 24) {
         s.dirBlur = [s.dirBlur[0] + dir[0] * blur * 1.3 * k, s.dirBlur[1] + dir[1] * blur * 1.3 * k];
         if (age < cutAt && age > cutAt - 1.2 / fps) s.exposure -= 0.5 * k;
         if (age >= cutAt) { const q = Math.min(1, (age - cutAt) / (3 / fps)); s.scale *= 1 + 0.12 * k * (1 - easeOut(q)); s.defocus = Math.max(s.defocus, 0.35 * k * (1 - q)); }
+        break;
+      }
+      case 'whipcam': {
+        const settle = clamp(P.settlePct ?? 0.15, 0.05, 0.5);
+        const dir = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] }[P.direction || 'left'];
+        const qSettle = p < settle ? Math.pow(1 - p / settle, 3) : 0;
+        const whip = (P.whipAmt ?? 0.04) * k * qSettle;
+        s.tx += dir[0] * whip + (P.driftX ?? 0.012) * (p - 0.5) * k;
+        s.ty += dir[1] * whip + (P.driftY ?? 0) * (p - 0.5) * k;
+        if (qSettle > 0.01) s.dirBlur = [s.dirBlur[0] + dir[0] * qSettle * (P.smear ?? 0.85) * k, s.dirBlur[1] + dir[1] * qSettle * (P.smear ?? 0.85) * k];
+        s.scale *= 1 + (P.creepZoom ?? 0.045) * p * k;
+        break;
+      }
+      case 'parallax': {
+        const q = easeOut(p);
+        s.paraOn = 1;
+        s.paraF = 1 + ((P.fgScale ?? 1.08) - 1) * q * k;
+        s.paraB = 1 + ((P.bgScale ?? 1.02) - 1) * q * k;
+        s.paraBlur = Math.max(s.paraBlur, (P.bgBlur ?? 0.008) * k);
+        s.bgDark = Math.max(s.bgDark, (P.bgDark ?? 0.25) * k);
+        break;
+      }
+      case 'clone': {
+        const env = Math.min(1, p / 0.15);
+        if (k * env > s.clone) {
+          s.clone = k * env;
+          s.cloneScale = 1 + ((P.scale ?? 1.22) - 1) * easeOut(p);
+          s.cloneBlur = P.blur ?? 0.025;
+          s.cloneGlow = P.glow ?? 0.45;
+          s.cloneColor = hexToRgb(P.color || '#ff9a2e');
+          s.clonePivot = [P.pivotX ?? 0.5, P.pivotY ?? 0.75];
+        }
+        break;
+      }
+      case 'dof': {
+        const env = sustainEnv(e, t);
+        s.dof = Math.max(s.dof, k * env);
+        s.bgDark = Math.max(s.bgDark, (P.bgDark ?? 0.2) * k * env);
+        break;
+      }
+      case 'rim': {
+        const env = p < 0.12 ? easeOut(p / 0.12) : 1 - easeInOut((p - 0.12) / 0.88);
+        s.caEdge = Math.max(s.caEdge, (P.caEdge ?? 0.006) * k * env);
+        s.iris = Math.max(s.iris, (P.iris ?? 0.35) * k * env);
+        s.irisColor = hexToRgb(P.color || '#7dd3fc');
+        const sw = P.sweep ?? 0.75;
+        if (sw > 0.001) { s.rim = Math.max(s.rim, sw * k); s.rimPhase = Math.max(s.rimPhase, p); }
+        break;
+      }
+      case 'colorlut': {
+        const env = sustainEnv(e, t);
+        if (k * env > s.lut) {
+          s.lut = k * env;
+          s.lutCrush = P.crush ?? 0.03;
+          s.lutClamp = P.clamp ?? 0.88;
+          s.lutTint = P.tint ?? 0.25;
+          s.lutDuo = P.duo ?? 0.15;
+          s.lutColor = hexToRgb(P.color || '#ff6b3d');
+        }
+        s.vig = Math.max(s.vig, (P.vignette ?? 0.38) * k * env);
+        break;
+      }
+      case 'adjust': {
+        const env = sustainEnv(e, t), m = k * env;
+        s.exposure += (P.exposure ?? 0) * m;
+        s.contrast *= 1 + ((P.contrast ?? 1) - 1) * m;
+        s.sat += ((P.saturation ?? 1) - 1) * m;
+        s.temp += (P.temp ?? 0) * m;
+        s.bloom += (P.bloom ?? 0) * m;
+        s.rgb += (P.rgb ?? 0) * m;
+        s.vig = Math.max(s.vig, (P.vignette ?? 0) * m);
         break;
       }
     }

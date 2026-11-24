@@ -1,4 +1,5 @@
 // Project model, clip time-remapping and undo history.
+import { evalCurve } from './curves.js';
 
 export const uid = (p = 'x') => p + '_' + Math.random().toString(36).slice(2, 9);
 export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -8,6 +9,7 @@ export const smooth = (t) => t * t * (3 - 2 * t);
 export const FORMATS = {
   orig: { w: 1920, h: 1080, label: 'Original (match source)' },
   '9:16': { w: 1080, h: 1920, label: '9:16 · TikTok / Reels' },
+  '5:4': { w: 1350, h: 1080, label: '5:4 · Showcase' },
   '4:5': { w: 1080, h: 1350, label: '4:5 · Instagram feed' },
   '1:1': { w: 1080, h: 1080, label: '1:1 · Square' },
   '16:9': { w: 1920, h: 1080, label: '16:9 · YouTube' },
@@ -43,6 +45,7 @@ export function createProject() {
     clips: [],
     effects: [],
     texts: [],
+    overlays: [],
     sfx: [], // { id, sound, start, vol, src }
     look: structuredClone(LOOK_DEFAULT),
     layout: 'fill',
@@ -77,16 +80,23 @@ const LUT_N = 96;
 const lutCache = new WeakMap();
 
 export function speedFromKeys(keys, u) {
-  if (!keys || !keys.length) return 1;
-  if (u <= keys[0][0]) return keys[0][1];
-  for (let i = 1; i < keys.length; i++) {
-    if (u <= keys[i][0]) {
-      const [u0, s0] = keys[i - 1], [u1, s1] = keys[i];
-      const f = u1 > u0 ? (u - u0) / (u1 - u0) : 1;
-      return s0 + (s1 - s0) * smooth(f);
+  return evalCurve(keys, u, 1);
+}
+
+const KF_DEFAULTS = { zoom: 1, panX: 0.5, panY: 0.5, rot: 0, exposure: 0, contrast: 1, saturation: 1 };
+export function evalClipKf(clip, local) {
+  const kf = clip && clip.kf;
+  if (!kf) return null;
+  const u = clamp(local / Math.max(1e-4, clip.dur), 0, 1);
+  const out = {};
+  let any = false;
+  for (const [k, def] of Object.entries(KF_DEFAULTS)) {
+    if (Array.isArray(kf[k]) && kf[k].length) {
+      out[k] = evalCurve(kf[k], u, def);
+      any = true;
     }
   }
-  return keys[keys.length - 1][1];
+  return any ? out : null;
 }
 
 function lutFor(keys) {
@@ -164,7 +174,7 @@ export function timelineMusic(p) {
 }
 
 // ---------- history ----------
-const SNAP_KEYS = ['format', 'layout', 'music', 'clips', 'effects', 'texts', 'sfx', 'look', 'auto', 'loop', 'voice'];
+const SNAP_KEYS = ['format', 'layout', 'music', 'clips', 'effects', 'texts', 'overlays', 'sfx', 'look', 'auto', 'loop', 'voice'];
 
 export class History {
   constructor(getProject, onRestore) {

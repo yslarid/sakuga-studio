@@ -18,6 +18,7 @@
       <label class="sel"><span>Layout</span><select id="layoutSel"></select></label>
     </div>
     <div class="top-actions">
+      <button id="btnQA" class="gpu-pill" title="Project QA &amp; Auto-Fix">✓ QA</button>
       <button id="undoBtn" class="icon-btn" title="Undo (⌘Z)">↶</button>
       <button id="redoBtn" class="icon-btn" title="Redo (⇧⌘Z)">↷</button>
       <button id="exportBtn" class="btn primary">Export</button>
@@ -91,6 +92,7 @@
     <section class="center">
       <div class="preview-wrap" id="previewWrap">
         <canvas id="preview"></canvas>
+        <canvas id="canvasGizmo" class="canvas-gizmo"></canvas>
         <div class="empty-state" id="emptyState">
           <div class="es-badge">桜</div>
           <h2>Drop your footage to start</h2>
@@ -118,12 +120,16 @@
       <nav class="tabs" data-group="right">
         <button data-tab="ai" class="active">Auto-edit</button>
         <button data-tab="inspector">Inspector</button>
+        <button data-tab="qa">QA</button>
       </nav>
       <section class="pane active" data-pane="ai">
         <div id="aiPanel"></div>
       </section>
       <section class="pane" data-pane="inspector">
         <div id="inspector"></div>
+      </section>
+      <section class="pane" data-pane="qa">
+        <div id="qaPanel"></div>
       </section>
     </aside>
   </main>
@@ -132,15 +138,18 @@
     <div class="tl-toolbar">
       <button class="tool" id="splitBtn" title="Split clip at playhead (S)">✂ Split</button>
       <button class="tool" id="deleteBtn" title="Delete selection (⌫)">🗑 Delete</button>
+      <button class="tool" id="btnCurves" title="Bezier Curve &amp; Velocity Editor">📈 Curves</button>
       <span class="sep"></span>
       <label class="toggle"><input type="checkbox" id="snapChk" checked><span>Snap to beats</span></label>
       <span class="grow"></span>
       <span class="tl-zoom"><span>−</span><input type="range" id="zoomRange" min="0" max="100" value="0"><span>＋</span></span>
     </div>
+    <div id="graphDrawer" class="graph-drawer hidden"></div>
     <div class="timeline" id="timeline">
       <div class="tl-heads">
         <div class="tl-head ruler-head"></div>
         <div class="tl-head" data-track="fx">FX</div>
+        <div class="tl-head" data-track="ovl">OVL</div>
         <div class="tl-head" data-track="text">Text</div>
         <div class="tl-head" data-track="sfx">SFX</div>
         <div class="tl-head" data-track="video">Video</div>
@@ -150,6 +159,7 @@
         <div class="tl-inner" id="tlInner">
           <canvas class="tl-ruler" id="tlRuler"></canvas>
           <div class="tl-track" data-track="fx" id="trackFx"></div>
+          <div class="tl-track" data-track="ovl" id="trackOvl"></div>
           <div class="tl-track" data-track="text" id="trackText"></div>
           <div class="tl-track" data-track="sfx" id="trackSfx"></div>
           <div class="tl-track" data-track="video" id="trackVideo"></div>
@@ -163,7 +173,7 @@
 
 <div id="modalRoot"></div>
 <div id="toasts"></div>
-<input type="file" id="fileInput" multiple accept="video/*,audio/*,.mkv,.mov,.mp3,.wav,.m4a,.aac,.flac,.ogg" hidden>
+<input type="file" id="fileInput" multiple accept="video/*,audio/*,image/*,.mkv,.mov,.mp3,.wav,.m4a,.aac,.flac,.ogg,.png,.jpg,.jpeg,.webp" hidden>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

@@ -60,7 +60,23 @@ export const KINETIC_FONTS = [
 ];
 export const KINETIC_COLORS = ['#ffffff', '#ffd23f', '#ff4d6d', '#7bdff2', '#c8b6ff', '#b8f2a1', '#ffffff'];
 
-export const TEXT_ANIMS = { pop: 'Pop in', fade: 'Fade', type: 'Typewriter', shake: 'Shake', slam: 'Slam', none: 'None' };
+export const TEXT_FONTS = [
+  'Anton', 'Bebas Neue', 'Bodoni Moda', 'DM Serif Display',
+  'Inter', 'Oswald', 'Playfair Display', 'Space Grotesk',
+];
+
+export const TEXT_ANIMS = {
+  pop: 'Pop in',
+  fade: 'Fade',
+  type: 'Typewriter',
+  shake: 'Shake',
+  slam: 'Slam',
+  slideUp: 'Slide up',
+  stagger: 'Stagger',
+  lockDrop: 'Lock drop',
+  glitch: 'Glitch',
+  none: 'None',
+};
 
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -565,7 +581,9 @@ export class TextLayer {
   }
 
   drawOne(x, lt) {
-    const g = this.ctx, W = this.canvas.width, H = this.canvas.height;
+    const outG = x.behind ? this.bctx : this.ctx;
+    if (x.behind) this.backUsed = true;
+    const W = this.canvas.width, H = this.canvas.height;
     const st = TEXT_STYLES[x.style] || TEXT_STYLES.impact;
     if (x.kind === 'slice') { this.drawSlice(x, lt); return; }
     if (x.kind === 'lockup') { this.drawLockup(x, lt); return; }
@@ -576,7 +594,7 @@ export class TextLayer {
     if (x.style === 'countdown') { this.drawCountdown(x, lt); return; }
     if (x.style === 'giant') { this.drawGiant(x, lt); return; }
     let text = st.upper ? x.text.toUpperCase() : x.text;
-    let scale = 1, alpha = 1, dx = 0, dy = 0;
+    let scale = 1, alpha = 1, dx = 0, dy = 0, glitchSplit = 0;
     const out = Math.min(0.15, x.dur * 0.2);
     if (lt > x.dur - out) alpha = Math.max(0, (x.dur - lt) / out);
     switch (x.anim) {
@@ -585,73 +603,176 @@ export class TextLayer {
       case 'type': { const n = Math.ceil(text.length * Math.min(1, lt / Math.min(x.dur * 0.6, text.length * 0.06))); text = text.slice(0, n); break; }
       case 'shake': { const a = W * 0.006; dx = Math.sin(lt * 71) * a; dy = Math.cos(lt * 53) * a; break; }
       case 'slam': { const p = Math.min(1, lt / 0.12); scale = 2.2 - 1.2 * p; alpha *= Math.min(1, lt / 0.05); break; }
+      case 'slideUp': { const p = Math.min(1, lt / 0.22); dy += (1 - easeOut(p)) * (x.size || 0.12) * W * 0.7; alpha *= Math.min(1, lt / 0.12); break; }
+      case 'glitch': {
+        const burst = lt < 0.18 || Math.floor(lt * 16) % 9 === 0;
+        if (burst) { glitchSplit = Math.max(2, W * 0.006); dx = (Math.sin(lt * 190) > 0 ? 1 : -1) * W * 0.004; }
+        alpha *= Math.min(1, lt / 0.03);
+        break;
+      }
     }
-    if (!text) return;
+    if (!text && !(Array.isArray(x.letters) && x.letters.length)) return;
     const fam = x.font || st.font, wt = x.weight || st.weight, it = x.italic ? 'italic ' : '';
     let size = Math.round((x.size || 0.12) * W);
+    const tracking = x.tracking != null ? x.tracking : (st.spacing || 0);
+    const usePersp = Math.abs(x.persp || 0) > 0.01;
+    let g = outG;
+    if (usePersp) {
+      if (!this.ptmp) { this.ptmp = document.createElement('canvas'); this.pctx = this.ptmp.getContext('2d'); }
+      if (this.ptmp.width !== W || this.ptmp.height !== H) { this.ptmp.width = W; this.ptmp.height = H; }
+      this.pctx.clearRect(0, 0, W, H);
+      g = this.pctx;
+    }
+    const cx = (x.x ?? 0.5) * W + dx, cy = (x.y ?? 0.5) * H + dy;
     g.save();
-    g.globalAlpha = alpha * (st.alpha ?? 1);
+    g.globalAlpha = usePersp ? 1 : alpha * (st.alpha ?? 1);
     g.font = `${it}${wt} ${size}px ${fontStack(fam)}, Impact, "Arial Black", sans-serif`;
-    if (st.fit) {
-      // kinetic words fill the frame width
+    if (st.fit && !(Array.isArray(x.letters) && x.letters.length) && !(x.splitGap > 0.002)) {
       if ('letterSpacing' in g) g.letterSpacing = '0px';
       const w = g.measureText(text).width;
       size = Math.min(Math.round((size * W * 0.9) / Math.max(1, w)), Math.round(W * 0.42));
       g.font = `${it}${wt} ${size}px ${fontStack(fam)}, Impact, "Arial Black", sans-serif`;
     }
-    if ('letterSpacing' in g) g.letterSpacing = st.spacing ? `${Math.round(size * st.spacing)}px` : '0px';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
+    if ('letterSpacing' in g) g.letterSpacing = tracking ? `${Math.round(size * tracking)}px` : '0px';
     const align = x.align || 'center';
+    g.textBaseline = 'middle';
     g.textAlign = align;
-    const lines = st.fit ? [text] : wrap(g, text, W * (align === 'center' ? 0.88 : 0.5)); // kinetic text is one full-width line
-    const lh = size * 1.08;
-    const cx = (x.x ?? 0.5) * W + dx, cy = (x.y ?? 0.5) * H + dy;
-    g.translate(cx, cy);
+    g.translate(usePersp ? W / 2 : cx, usePersp ? H / 2 : cy);
+    if (!usePersp && x.rot) g.rotate(x.rot);
     g.scale(scale, scale);
-    const top = -((lines.length - 1) * lh) / 2;
-    lines.forEach((line, i) => {
-      const y = top + i * lh;
-      {
-        const lw = g.measureText(line).width * scale, ox = align === 'left' ? 0 : align === 'right' ? -lw : -lw / 2;
-        this.grow(cx + ox - size * 0.2, cy + (y - lh / 2) * scale, cx + ox + lw + size * 0.2, cy + (y + lh / 2) * scale);
+
+    const makeFill = (ctx, yMid) => {
+      if (Array.isArray(x.gradient) && x.gradient.length >= 2) {
+        const gr = ctx.createLinearGradient(0, yMid - size * 0.55, 0, yMid + size * 0.55);
+        x.gradient.forEach((c, i) => gr.addColorStop(i / (x.gradient.length - 1), c));
+        return gr;
       }
-      if (st.box) {
-        const w = g.measureText(line).width + size * 0.6, bx = align === 'left' ? -size * 0.3 : align === 'right' ? -w + size * 0.3 : -w / 2;
-        g.fillStyle = st.box;
-        roundRect(g, bx, y - lh / 2, w, lh, size * 0.18);
-        g.fill();
+      return x.color || st.color || '#ffffff';
+    };
+
+    const drawGlyph = (str, gx, gy, localAlpha = 1, localScale = 1, localRot = 0) => {
+      if (localAlpha <= 0.002 || !str) return;
+      g.save();
+      g.globalAlpha *= localAlpha;
+      g.translate(gx, gy);
+      if (localRot) g.rotate(localRot);
+      if (localScale !== 1) g.scale(localScale, localScale);
+      if (glitchSplit > 0) {
+        g.save(); g.globalAlpha *= 0.65;
+        g.fillStyle = '#ff2bd6'; g.fillText(str, -glitchSplit, 0);
+        g.fillStyle = '#00e5ff'; g.fillText(str, glitchSplit, 0);
+        g.restore();
       }
-      if (st.glow) {
-        g.shadowColor = x.glowColor || st.glow;
-        g.shadowBlur = size * 0.5;
+      const glowC = x.glowColor || st.glow;
+      const glowA = x.glowAmt != null ? x.glowAmt : (st.glow ? 0.55 : 0);
+      if (glowC && glowA > 0.002) {
+        g.shadowColor = glowC;
+        g.shadowBlur = size * (0.15 + glowA * 0.55);
         g.fillStyle = x.color || '#fff';
-        g.fillText(line, 0, y);
-        g.shadowBlur = size * 0.2;
-      }
-      if (st.hollow) {
-        g.lineJoin = 'round';
-        g.lineWidth = Math.max(2, size * 0.045);
-        g.strokeStyle = x.color || '#ffffff';
-        g.strokeText(line, 0, y);
-        return;
-      }
-      if (st.shadow) {
+        g.fillText(str, 0, 0);
+        g.shadowBlur = size * 0.18;
+      } else if (st.shadow) {
         g.shadowColor = 'rgba(0,0,0,0.65)';
         g.shadowBlur = size * 0.35;
         if (x.style === 'dialogue') { g.shadowColor = 'rgba(0,0,0,0.55)'; g.shadowBlur = size * 0.25; g.shadowOffsetY = size * 0.06; }
       }
-      if (st.stroke) {
+      if (st.hollow) {
         g.lineJoin = 'round';
-        g.lineWidth = size * st.strokeW;
-        g.strokeStyle = x.strokeColor || st.stroke;
-        g.strokeText(line, 0, y);
+        g.lineWidth = Math.max(2, size * 0.045);
+        g.strokeStyle = x.strokeColor || x.color || '#ffffff';
+        g.strokeText(str, 0, 0);
+        g.restore();
+        return;
       }
-      g.fillStyle = x.color || st.color || '#ffffff';
-      g.fillText(line, 0, y);
-      g.shadowBlur = 0; g.shadowOffsetY = 0;
-    });
+      const swFrac = x.strokeW != null ? x.strokeW : (st.stroke ? (st.strokeW || 0.08) : 0);
+      if (swFrac > 0.001) {
+        g.lineJoin = 'round';
+        g.lineWidth = Math.max(1.5, size * swFrac);
+        g.strokeStyle = x.strokeColor || st.stroke || '#000000';
+        g.strokeText(str, 0, 0);
+      }
+      g.fillStyle = makeFill(g, 0);
+      g.fillText(str, 0, 0);
+      g.restore();
+    };
+
+    if (Array.isArray(x.letters) && x.letters.length) {
+      g.textAlign = 'center';
+      x.letters.forEach((L, idx) => {
+        if (!L || L.hidden || !L.ch) return;
+        const del = L.delay ?? idx * 0.03;
+        if (lt < del) return;
+        const p = Math.min(1, (lt - del) / 0.16);
+        const la = p < 1 ? easeOut(p) : 1;
+        const ls = (L.scale ?? 1) * (x.anim === 'lockDrop' ? 1.35 - 0.35 * easeOut(p) : 1);
+        const lx = (L.dx || 0) * W, ly = (L.dy || 0) * H;
+        drawGlyph(st.upper ? L.ch.toUpperCase() : L.ch, lx, ly, la, ls, L.rot || 0);
+        const half = size * 0.55 * ls * scale;
+        this.grow(cx + lx * scale - half, cy + ly * scale - half, cx + lx * scale + half, cy + ly * scale + half);
+      });
+    } else if (x.splitGap > 0.002 && text.length >= 2) {
+      const mid = Math.ceil(text.length / 2);
+      const leftStr = text.slice(0, mid), rightStr = text.slice(mid);
+      const gapPx = (x.splitGap * W) / Math.max(0.1, scale);
+      g.textAlign = 'right';
+      drawGlyph(leftStr, -gapPx * 0.5, 0);
+      g.textAlign = 'left';
+      drawGlyph(rightStr, gapPx * 0.5, 0);
+      const wL = g.measureText(leftStr).width * scale, wR = g.measureText(rightStr).width * scale;
+      const gHalf = (gapPx * 0.5) * scale;
+      this.grow(cx - gHalf - wL - size * 0.2, cy - size * 0.6 * scale, cx + gHalf + wR + size * 0.2, cy + size * 0.6 * scale);
+    } else if (x.anim === 'stagger' || x.anim === 'lockDrop') {
+      const chars = [...text];
+      g.textAlign = 'center';
+      const widths = chars.map((ch) => Math.max(size * 0.25, g.measureText(ch).width));
+      const totalW = widths.reduce((a, b) => a + b, 0);
+      let cur = align === 'left' ? 0 : align === 'right' ? -totalW : -totalW / 2;
+      const stepDur = x.anim === 'lockDrop' ? 0.04 : 0.035;
+      chars.forEach((ch, idx) => {
+        const cw = widths[idx];
+        const age = lt - idx * stepDur;
+        if (age >= 0) {
+          const p = Math.min(1, age / 0.16), e = easeOut(p);
+          const scC = x.anim === 'lockDrop' ? 1.35 - 0.35 * e : 0.78 + 0.22 * e;
+          const dyC = x.anim === 'stagger' ? (1 - e) * size * 0.25 : 0;
+          drawGlyph(ch, cur + cw * 0.5, dyC, e, scC, 0);
+        }
+        cur += cw;
+      });
+      const ox = align === 'left' ? 0 : align === 'right' ? -totalW * scale : (-totalW * scale) / 2;
+      this.grow(cx + ox - size * 0.2, cy - size * 0.6 * scale, cx + ox + totalW * scale + size * 0.2, cy + size * 0.6 * scale);
+    } else {
+      const lines = st.fit ? [text] : wrap(g, text, W * (align === 'center' ? 0.88 : 0.5));
+      const lh = size * 1.08;
+      const top = -((lines.length - 1) * lh) / 2;
+      lines.forEach((line, i) => {
+        const y = top + i * lh;
+        {
+          const lw = g.measureText(line).width * scale, ox = align === 'left' ? 0 : align === 'right' ? -lw : -lw / 2;
+          this.grow(cx + ox - size * 0.2, cy + (y - lh / 2) * scale, cx + ox + lw + size * 0.2, cy + (y + lh / 2) * scale);
+        }
+        if (st.box) {
+          const w = g.measureText(line).width + size * 0.6, bx = align === 'left' ? -size * 0.3 : align === 'right' ? -w + size * 0.3 : -w / 2;
+          g.fillStyle = st.box;
+          roundRect(g, bx, y - lh / 2, w, lh, size * 0.18);
+          g.fill();
+        }
+        drawGlyph(line, 0, y);
+      });
+    }
+    if ('letterSpacing' in g) g.letterSpacing = '0px';
     g.restore();
+
+    if (usePersp) {
+      const p = Math.max(-0.5, Math.min(0.5, x.persp));
+      const hw = W * 0.5 * (1 - Math.abs(p) * 0.18), hhL = H * 0.5 * (1 - p * 0.45), hhR = H * 0.5 * (1 + p * 0.45);
+      outG.save();
+      outG.globalAlpha = alpha * (st.alpha ?? 1);
+      outG.translate(cx, cy);
+      if (x.rot) outG.rotate(x.rot);
+      warpQuad(outG, this.ptmp, W, H, [[-hw, -hhL], [hw, -hhR], [hw, hhR], [-hw, hhL]], 10, 6);
+      outG.restore();
+    }
   }
 }
 

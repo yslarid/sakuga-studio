@@ -254,6 +254,7 @@ export class Player {
     this.t = 0;
     this.playing = false;
     this.pools = new Map();
+    this.ovlImages = new Map();
     this.cur = null;
     this.prep = null;
     this.needs = true;
@@ -287,6 +288,47 @@ export class Player {
     const p = this.pools.get(id);
     if (p) for (const v of p) { v.pause(); v.removeAttribute('src'); v.load(); }
     this.pools.delete(id);
+    this.ovlImages.delete(id);
+  }
+
+  imgFor(media) {
+    let img = this.ovlImages.get(media.id);
+    if (!img) {
+      img = new Image();
+      img.onload = () => { this.needs = true; };
+      img.src = media.url;
+      this.ovlImages.set(media.id, img);
+    }
+    return img.complete && img.naturalWidth > 0 ? img : null;
+  }
+
+  overlaySourcesFor(p, f) {
+    const list = f.mediaOverlays;
+    if (!list || !list.length) return { map: null, els: null };
+    const map = new Map(), els = new Set();
+    for (const ov of list) {
+      const m = getMedia(p, ov.mediaId);
+      if (!m) continue;
+      if (m.type === 'image' || /\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(m.name || '')) {
+        const img = this.imgFor(m);
+        if (img) map.set(ov.id, img);
+        continue;
+      }
+      const v = this.elFor({ id: `ov:${ov.id}` }, m);
+      els.add(v);
+      const maxT = Math.max(0.01, (m.duration || 10) - 0.02);
+      const targetT = clamp(ov.srcTime, 0, maxT);
+      if (this.playing) {
+        if (Math.abs(v.playbackRate - 1) > 0.02) v.playbackRate = 1;
+        if (!v.seeking && Math.abs(v.currentTime - targetT) > 0.14) v.currentTime = targetT;
+        if (v.paused && !v.seeking) v.play().catch(() => {});
+      } else {
+        if (!v.paused) v.pause();
+        if (!v.seeking && Math.abs(v.currentTime - targetT) > 0.5 / 60) v.currentTime = targetT;
+      }
+      if (v.readyState >= 2) map.set(ov.id, v);
+    }
+    return { map: map.size ? map : null, els };
   }
 
   elFor(clip, media) {
@@ -394,6 +436,7 @@ export class Player {
     const { w, h } = formatSize(p);
     const f = frameParams(p, this.t, w, h);
     let source = null;
+    const ovl = this.overlaySourcesFor(p, f);
     if (f.clip) {
       const v = this.elFor(f.clip, f.media);
       if (this.cur !== v) { this.cur = v; this.needs = true; }
@@ -422,7 +465,7 @@ export class Player {
           }
         }
       }
-      for (const pool of this.pools.values()) for (const e of pool) if (e !== v && e !== this.prep && !e.paused) e.pause();
+      for (const pool of this.pools.values()) for (const e of pool) if (e !== v && e !== this.prep && !(ovl.els && ovl.els.has(e)) && !e.paused) e.pause();
     }
     // paused: redraw a few times a second as a safety net for late-decoded frames
     if (!this.playing && !this.needs && performance.now() - (this.lastDraw || 0) < 250) return;
@@ -438,7 +481,7 @@ export class Player {
       if (got && got !== 'loading') r.setNext(got, pv.key);
       else if (!got) { this.previews.set(pv.key, 'loading'); grabFrame(pv.media, pv.srcTime).then((b) => { this.previews.set(pv.key, b); this.invalidate(); }).catch(() => this.previews.delete(pv.key)); }
     }
-    r.draw(f, source, tc, p.look, this.t, blend, app.textLayer.backOut);
+    r.draw(f, source, tc, p.look, this.t, blend, app.textLayer.backOut, ovl.map);
     // loop preview: remember the opening frame so the end can blend into it (taken again whenever
     // the opening shot or the look changes, so it never blends into an old version of the edit)
     const c0 = p.clips[0], sig = c0 ? `${c0.mediaId}|${c0.srcIn.toFixed(3)}|${JSON.stringify(p.look)}` : '';

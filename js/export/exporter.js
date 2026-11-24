@@ -214,7 +214,7 @@ async function renderEncode(app, { width, height, fps, outputs, hd = true }, onP
   // a snapshot of the edit: captions being placed, an analysis finishing or a key pressed while
   // this runs can't change the cuts or text halfway through (the sound is mixed once, up front)
   const live = app.project;
-  const project = { ...live, clips: structuredClone(live.clips), effects: structuredClone(live.effects), texts: structuredClone(live.texts), sfx: structuredClone(live.sfx || []), look: structuredClone(live.look), auto: live.auto, renderFps: fps };
+  const project = { ...live, clips: structuredClone(live.clips), effects: structuredClone(live.effects), texts: structuredClone(live.texts), overlays: structuredClone(live.overlays || []), sfx: structuredClone(live.sfx || []), look: structuredClone(live.look), auto: live.auto, renderFps: fps };
   const dur = timelineDuration(project);
   if (dur <= 0) throw new Error('Nothing to export yet — add some footage first.');
   const Mp4Muxer = await loadMp4Muxer();
@@ -269,6 +269,33 @@ async function renderEncode(app, { width, height, fps, outputs, hd = true }, onP
       if (m) sources.set(m.id, await openFrameSource(m, { hd }));
     }
   }
+  for (const ov of project.overlays || []) {
+    if (sources.has(ov.mediaId)) continue;
+    const m = getMedia(project, ov.mediaId);
+    if (!m) continue;
+    if (m.type === 'image' || /\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(m.name || '')) {
+      const img = new Image();
+      img.src = m.url;
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+      const bmp = await createImageBitmap(img);
+      sources.set(m.id, { kind: 'image', frameAt: async () => bmp, close: () => bmp.close() });
+    } else {
+      sources.set(m.id, await openFrameSource(m, { hd: false }));
+    }
+  }
+  const readOverlaySources = async (f) => {
+    const list = f.mediaOverlays;
+    if (!list || !list.length) return null;
+    const map = new Map();
+    for (const ov of list) {
+      const s = sources.get(ov.mediaId);
+      const m = getMedia(project, ov.mediaId);
+      if (!s) continue;
+      const st = Math.max(0, Math.min(ov.srcTime, Math.max(0.01, (m && m.duration ? m.duration : 10) - 0.02)));
+      try { const fr = await s.frameAt(st); if (fr) map.set(ov.id, fr); } catch {}
+    }
+    return map.size ? map : null;
+  };
   const modes = [...sources.values()].map((s) => s.kind);
   // hero shots slowed on drawings on twos or threes: where each of their drawings starts, read once
   const drawings = new Map();
@@ -356,15 +383,16 @@ async function renderEncode(app, { width, height, fps, outputs, hd = true }, onP
       // the clean first frame (no watermark, no loop blur) that the last beat blends into
       const f0 = { ...frameParams(project, 0, width, height), loop: null };
       const s0 = f0.clip && sources.has(f0.media.id) ? await sources.get(f0.media.id).frameAt(f0.srcTime, f0.clip) : null;
+      const ovl0 = await readOverlaySources(f0);
       r.setMark(null);
       r.setSubject(f0.clip ? maskAt(f0.media, f0.srcTime) : null);
-      r.draw(f0, s0, text.draw(project.texts, 0, f0), project.look, 0, 0, text.backOut);
+      r.draw(f0, s0, text.draw(project.texts, 0, f0), project.look, 0, 0, text.backOut, ovl0);
       r.setLoopFrame(await createImageBitmap(canvas));
       if (tall) {
         const g0 = { ...frameParams(project, 0, 1080, 1920), loop: null };
         tall.r.setMark(null);
         tall.r.setSubject(g0.clip ? maskAt(g0.media, g0.srcTime) : null);
-        tall.r.draw(g0, s0, tall.text.draw(tall.texts, 0, g0), project.look, 0, 0, tall.text.backOut);
+        tall.r.draw(g0, s0, tall.text.draw(tall.texts, 0, g0), project.look, 0, 0, tall.text.backOut, ovl0);
         tall.r.setLoopFrame(await createImageBitmap(tall.canvas));
       }
     }
@@ -383,11 +411,12 @@ async function renderEncode(app, { width, height, fps, outputs, hd = true }, onP
       const f = frameParams(project, t, width, height);
       let src = null;
       if (f.clip && sources.has(f.media.id)) src = await sourcePicture(project, sources, f, pair, interp, drawings);
+      const ovl = await readOverlaySources(f);
       const tc = text.draw(project.texts, t, f);
       r.setMark(markLayer(project, width, height, t));
       r.setSubject(f.clip ? maskAt(f.media, f.srcTime) : null);
       if (f.preview && nexts.has(f.preview.key)) r.setNext(nexts.get(f.preview.key), f.preview.key);
-      r.draw(f, src, tc, project.look, t, blendAmount(project.look, f, prevF, 1 / fps), text.backOut);
+      r.draw(f, src, tc, project.look, t, blendAmount(project.look, f, prevF, 1 / fps), text.backOut, ovl);
       prevF = f;
       if (tall) {
         // (the same moment of the same source picture, framed for the tall frame)
@@ -395,7 +424,7 @@ async function renderEncode(app, { width, height, fps, outputs, hd = true }, onP
         tall.r.setMark(markLayer(project, 1080, 1920, t));
         tall.r.setSubject(f2.clip ? maskAt(f2.media, f2.srcTime) : null);
         if (f2.preview && nexts.has(f2.preview.key)) tall.r.setNext(nexts.get(f2.preview.key), f2.preview.key);
-        tall.r.draw(f2, src, tall.text.draw(tall.texts, t, f2), project.look, t, blendAmount(project.look, f2, tall.prev, 1 / fps), tall.text.backOut);
+        tall.r.draw(f2, src, tall.text.draw(tall.texts, t, f2), project.look, t, blendAmount(project.look, f2, tall.prev, 1 / fps), tall.text.backOut, ovl);
         tall.prev = f2;
       }
       const stamp = { timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) }, key = { keyFrame: i % Math.round(fps * 2) === 0 };

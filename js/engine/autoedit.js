@@ -5,6 +5,7 @@ import { defaultParams, LOOKS, GRADE_DEFAULT } from '../effects.js';
 import { gridMean, salProfile, bestCropCenter } from '../analysis/video.js';
 import { pickSound, sfxById, sfxManifest } from '../sfx.js';
 import { pickVfx } from '../vfx.js';
+import { extractPose, scorePosePair, computeAlignTransform } from './matchcut.js';
 
 // Styles distilled from viral TikTok / Instagram anime edits (see README "Edit styles").
 // `shot` is the target shot length in seconds per energy level. The reference edits
@@ -56,6 +57,21 @@ export const STYLES = {
     label: 'Cinematic', shot: { low: 3.0, mid: 2.0, high: 1.4 }, buildup: null, look: 'tealorange', kit: 'soft',
     finish: { glow: 0.1, glowThreshold: 0.78, vignette: 0.3, grain: 0.06, sharpen: 0.3 }, motionBlur: 0.3, transitions: ['zoomblur', 'whip', 'echo'], transitionEvery: 0,
     rec: ['cuts', 'letterbox', 'camera', 'transitions', 'drops', 'grade', 'finish', 'reframe', 'fadein', 'fadeout'],
+  },
+  matchcut: {
+    label: 'Match-Cut Flow', shot: { low: 1.5, mid: 0.75, high: 0.5 }, buildup: 'fast', look: 'vivid', kit: 'full', matchCut: true,
+    finish: { glow: 0.14, glowThreshold: 0.78, vignette: 0.28, grain: 0, sharpen: 0.45 }, motionBlur: 0.4, transitions: ['whipcam', 'zoomblur'], transitionEvery: 1,
+    rec: ['cuts', 'drops', 'beatzoom', 'whipcam', 'colorlut', 'colormatch', 'transitions', 'grade', 'finish', 'motionblur', 'reframe', 'sfx', 'burst', 'camera', 'actionhits', 'fxboost'],
+  },
+  showcase: {
+    label: 'Character Showcase (Month)', shot: { low: 2.2, mid: 1.25, high: 0.85 }, buildup: 'normal', look: 'amber', kit: 'full', parallaxHero: true,
+    finish: { glow: 0.2, glowThreshold: 0.75, vignette: 0.34, grain: 0.04, sharpen: 0.35 }, motionBlur: 0.35, transitions: ['whipcam', 'dissolve', 'zoomblur'], transitionEvery: 2,
+    rec: ['cuts', 'drops', 'parallax', 'colorlut', 'colormatch', 'rim', 'transitions', 'grade', 'finish', 'motionblur', 'reframe', 'sfx', 'camera', 'fxboost'],
+  },
+  depthlyric: {
+    label: '3D Depth Lyric (Love Me)', shot: { low: 1.8, mid: 1.0, high: 0.75 }, buildup: null, look: 'vivid', kit: 'soft', behindText: true,
+    finish: { glow: 0.16, glowThreshold: 0.78, vignette: 0.18, grain: 0.03, sharpen: 0.3 }, motionBlur: 0.3, transitions: ['dissolve', 'whipcam'], transitionEvery: 3,
+    rec: ['cuts', 'rim', 'colormatch', 'transitions', 'camera', 'grade', 'finish', 'reframe', 'backdrop'],
   },
 };
 
@@ -221,7 +237,7 @@ export function buildPlan(project, opts) {
   }
   const slots = buildSlots(G, A, win, S, opts.cutTimes, opts.phrases);
   const notes = opts.notes || {};
-  const { clips: picks, scenesUsed, scenesTotal } = assignFootage(slots, videos, win, opts.order || 'story', (m) => cropWidth(project, m), { notes, soft: S.kit === 'soft', pro: !!S.pro });
+  const { clips: picks, scenesUsed, scenesTotal } = assignFootage(slots, videos, win, opts.order || 'story', (m) => cropWidth(project, m), { notes, soft: S.kit === 'soft', pro: !!S.pro, matchCut: !!S.matchCut });
   // (the flurry glimpses the shots after it as the notes leave them; a note can still pin a glimpse)
   const pins = shotNotesBySlot(picks, videos, notes);
   applyShotNotes(picks, videos, pins);
@@ -866,7 +882,18 @@ function storyRanges(notes, videos) {
   return out;
 }
 
-function assignFootage(slots, videos, win, order, cropW, { notes = {}, soft = false, pro = false } = {}) {
+function intelAt(media, t) {
+  const samples = media && media.intel && media.intel.samples;
+  if (!samples || !samples.length) return null;
+  let best = samples[0], dtBest = Math.abs(samples[0].t - t);
+  for (let i = 1; i < samples.length; i++) {
+    const dt = Math.abs(samples[i].t - t);
+    if (dt < dtBest) { best = samples[i]; dtBest = dt; }
+  }
+  return dtBest <= 1.8 ? best : null;
+}
+
+function assignFootage(slots, videos, win, order, cropW, { notes = {}, soft = false, pro = false, matchCut = false } = {}) {
   // director notes: scenes to leave out (a comedy aside, a side character) and scenes to favour
   const sn = notes.scenes || {};
   const banned = new Set((sn.ban || []).map((r) => sceneRef(r, videos)).filter(Boolean).map((r) => r.key));
@@ -920,7 +947,7 @@ function assignFootage(slots, videos, win, order, cropW, { notes = {}, soft = fa
   };
   const mean = (g, key, a, b, def) => (g[key] ? gridMean(g, key, a, b) : def);
   // Eye trace: where the eye is at the end of one shot and where the next shot's subject opens.
-  let prevFocal = null;
+  let prevFocal = null, prevPose = null;
 
   slots.forEach((slot, i) => {
     // the drop's flurry is filled once the shots after it are chosen (glimpses of them)
@@ -941,6 +968,7 @@ function assignFootage(slots, videos, win, order, cropW, { notes = {}, soft = fa
     // move it on)
     const target = ((slot.start - win.start + slot.dur / 2) / Math.max(0.1, win.end - win.start)) * total;
     let best = null;
+    const ranked = [];
     for (const sc of scenes) {
       const len = sc.b - sc.a;
       const g = sc.m.analysis.grid;
@@ -957,6 +985,16 @@ function assignFootage(slots, videos, win, order, cropW, { notes = {}, soft = fa
         const edge = mean(g, 'pe', c.s, c.s + c.span, 0.5);
         const sat = mean(g, 'ps', c.s, c.s + c.span, 0.3);
         let score = 1 - Math.abs(mot - desired) + mot * (slot.level === 'high' ? 0.3 : 0.1);
+        const it = intelAt(sc.m, c.s + c.span * 0.5);
+        let reason = 'grid fit';
+        if (it) {
+          score += ((it.score ?? 5) - 5) * 0.16;
+          if (it.hasFace && (role === 'hold' || role === 'outro' || soft)) score += 0.3;
+          const tags = it.tags || {};
+          if (tags.fighting || tags.sword || tags.weapon || tags.magic || tags.energy || tags.fire) { score += 0.25; reason = 'action sakuga'; }
+          else if (it.hasEyes) reason = 'hero portrait';
+          if (tags.closed_eyes) score -= 0.35;
+        }
         if (slot.isDrop) score += mot * 0.5 + edge * 0.3;
         if (i === 0) score += edge * 0.5; // open on a clear, detailed shot
         if (role) {
@@ -971,10 +1009,6 @@ function assignFootage(slots, videos, win, order, cropW, { notes = {}, soft = fa
         if (soft) score += Math.min(1, mean(g, 'pf', c.s, c.s + c.span, 0) * 3) * 0.6;
         if (lum < 0.08) score -= 1.5; else if (lum < 0.16) score -= 0.5; else if (lum > 0.9) score -= 0.6;
         if (sc.w < 0.999) score += (coverOf(sc, c.s, c.span) - sc.w) * 1.5;
-        // a window with an undetected cut or a big flash inside reads as chaos: one shot per slot
-        // pro: the impact inside a clip (a hit, a flash, a smear: a spike in the picture) lands on a beat
-        // of its slot, the way editors line the hit up with the music, not just the cut; spikes off
-        // the beats still read as chaos (or an undetected cut)
         let onBeat = 0;
         if (pro && !soft && g.pk && slot.beats > 0) {
           const step = (slot.dur / slot.beats) * Math.min(1, c.fit);
@@ -987,8 +1021,6 @@ function assignFootage(slots, videos, win, order, cropW, { notes = {}, soft = fa
         if (order === 'story' || storyMode) score -= (Math.abs(pos + c.span / 2 - target) / Math.max(1, total)) * orderW;
         // the director's story only moves forward
         if (storyMode && pos < lastPos - 0.25) score -= 2.5;
-        // pro: a shot that picks up the action where the last one left it (the next moment of the
-        // same sequence) reads as one story
         if (pro && prevSrc && prevSrc.m === sc.m && sc.id !== prev && c.s >= prevSrc.end - 0.1 && c.s <= prevSrc.end + 4) score += 0.35;
         let ov = 0;
         for (const u of used) if (u.m === sc.m) ov += Math.max(0, Math.min(u.b, c.s + c.span) - Math.max(u.a, c.s));
@@ -1000,8 +1032,6 @@ function assignFootage(slots, videos, win, order, cropW, { notes = {}, soft = fa
         if (sc.id === prev) score -= 1.2;
         if (prevSrc && prevSrc.m === sc.m && Math.abs(c.s - prevSrc.t) < 3 && !(pro && sc.id !== prev)) score -= 0.9; // reads as a jump cut
         if (sc.id === prev2) score -= 0.3;
-        // colour flow, like the reference mixes: builds and later drops jump to a fresh colour on
-        // each cut; the first drop holds one colour family for its run
         if (prevHue && g.phx) {
           const hx = gridMean(g, 'phx', c.s, c.s + c.span), hy = gridMean(g, 'phy', c.s, c.s + c.span);
           if (Math.hypot(hx, hy) > 0.04 && prevHue.ch > 0.04) {
@@ -1009,16 +1039,28 @@ function assignFootage(slots, videos, win, order, cropW, { notes = {}, soft = fa
             score += dropPhase === 1 ? (dh <= 30 ? 0.35 : dh > 70 ? -0.3 : 0) : dh >= 90 ? 0.3 : dh < 25 ? -0.2 : 0;
           }
         }
-        if (prevFocal != null) {
+        let pairInfo = null;
+        if (matchCut && prevPose) {
+          const pose = extractPose(sc.m, c.s);
+          pairInfo = scorePosePair(prevPose, pose);
+          score += pairInfo.score * 1.4;
+          if (pairInfo.score > 0.65) reason = pairInfo.mirrorRecommended ? 'match-cut (flip)' : 'match-cut';
+        } else if (prevFocal != null) {
           const fi = focalOf(g, c.s, c.s + Math.min(0.4, c.span));
           if (fi != null) score += 0.35 * (1 - Math.min(1, Math.abs(fi - prevFocal) / 0.3)) - 0.12;
         }
-        if (!best || score > best.score) best = { score, sc, mot, ...c };
+        const cand = { score, sc, mot, reason, pairInfo, ...c };
+        if (!best || score > best.score) best = cand;
+        if (ranked.length < 24 || score > ranked[ranked.length - 1].score) {
+          ranked.push(cand);
+          ranked.sort((a, b) => b.score - a.score);
+          if (ranked.length > 24) ranked.length = 24;
+        }
       }
     }
     if (!best) {
       const sc = scenes[i % scenes.length];
-      best = { sc, s: sc.a, span: Math.min(span, sc.b - sc.a), fit: Math.min(1, (sc.b - sc.a) / span), mot: 0.5 };
+      best = { sc, s: sc.a, span: Math.min(span, sc.b - sc.a), fit: Math.min(1, (sc.b - sc.a) / span), mot: 0.5, score: 0, reason: 'fallback' };
     }
     used.push({ m: best.sc.m, a: best.s, b: best.s + best.span });
     {
@@ -1032,6 +1074,20 @@ function assignFootage(slots, videos, win, order, cropW, { notes = {}, soft = fa
     lastPos = Math.max(lastPos, best.sc.off + (best.s - best.sc.a) + best.span);
     const gB = best.sc.m.analysis.grid, focalIn = focalOf(gB, best.s, best.s + Math.min(0.4, best.span));
     prevFocal = focalOf(gB, Math.max(best.s, best.s + best.span - 0.4), best.s + best.span);
+    const curPoseOut = extractPose(best.sc.m, best.s + Math.max(0, best.span - 0.05));
+    const alts = [];
+    for (const r of ranked) {
+      if (alts.length >= 6) break;
+      if (r.sc.m.id === best.sc.m.id && Math.abs(r.s - best.s) < 0.45) continue;
+      if (alts.some((a) => a.mediaId === r.sc.m.id && Math.abs(a.srcIn - r.s) < 0.5)) continue;
+      alts.push({ mediaId: r.sc.m.id, srcIn: +r.s.toFixed(3), score: +r.score.toFixed(2), reason: r.reason || 'alt' });
+    }
+    let alignExtra = {};
+    if (matchCut && prevPose && best.pairInfo) {
+      const al = computeAlignTransform(prevPose, extractPose(best.sc.m, best.s), !!best.pairInfo.mirrorRecommended);
+      alignExtra = { mirror: al.mirror, pan: [al.panX, al.panX], panY: al.panY, zoom: al.zoom > 1.04 ? +al.zoom.toFixed(2) : undefined };
+    }
+    prevPose = curPoseOut;
     clips.push({
       id: uid('c'), mediaId: best.sc.m.id,
       start: slot.start - win.start, dur: slot.dur, srcIn: best.s,
@@ -1040,7 +1096,8 @@ function assignFootage(slots, videos, win, order, cropW, { notes = {}, soft = fa
       pan: null, scene: [best.sc.a, best.sc.b], motion: best.mot,
       focus: best.sc.m.analysis.grid.sal ? bestCropCenter(salProfile(best.sc.m.analysis.grid, best.s, best.s + best.span), 0.35).c : 0.5,
       level: slot.level, energy: slot.energy, isDrop: slot.isDrop, beats: slot.beats, role: slot.role, hero: !!slot.hero,
-      focalIn, focalOut: prevFocal,
+      focalIn, focalOut: prevFocal, alts,
+      ...alignExtra,
     });
   });
   return { clips, scenesUsed: usedScenes.size, scenesTotal: scenes.length };
@@ -1585,12 +1642,13 @@ export function buildSuggestions(project, plan) {
         if (k === 'softdissolve') return fx('dissolve', t, 10 / 24, { intensity: 1 });
         if (k === 'defocus') return fx('defocus', t, d, { intensity: 0.8, mode: 'in' });
         if (k === 'whip') return fx('whip', t - d / 2, d, { intensity: 0.8, direction: i % 4 < 2 ? 'left' : 'right' });
+        if (k === 'whipcam') return fx('whipcam', t, Math.min(d * 1.6, 0.45), { intensity: 0.9, direction: i % 4 < 2 ? 'left' : 'right' });
         if (k === 'spin') return fx('spin', t - d / 2, d, { intensity: 0.8, direction: i % 2 ? 'ccw' : 'cw' });
         // a zoom through the cut: in over half the beat, carried on into the next shot, then settled
         const zd = d / 2 + 0.9 * (d / 2) + 0.35;
         return fx('zoomblur', t - d / 2, zd, { intensity: 0.8, cut: d / 2 / zd });
       });
-      const names = { zoomblur: 'zoom-blur', whip: 'whip-pan', spin: 'spin', echo: 'echo dissolve', defocus: 'blur-in', blurdip: 'blur dip', dipblack: 'dip to black', tiles: 'mirror tiles', smear: 'smear', whiteout: 'white-out', cut: 'hard cut' };
+      const names = { zoomblur: 'zoom-blur', whip: 'whip-pan', whipcam: 'whip-cam settle', spin: 'spin', echo: 'echo dissolve', defocus: 'blur-in', blurdip: 'blur dip', dipblack: 'dip to black', tiles: 'mirror tiles', smear: 'smear', whiteout: 'white-out', cut: 'hard cut' };
       add({ id: 'transitions', icon: '◎', group: 'Transitions', title: 'Transitions', desc: `${[...new Set(kinds)].map((k) => names[k] || k).join(', ')} on ${plural(picks.length, 'cut')}`, effects: effects.filter(Boolean), at: Math.max(0, picks[0] - 0.8) });
     }
   }
@@ -2023,6 +2081,29 @@ export function buildSuggestions(project, plan) {
       // (and the line art left as drawn: no sharpening, light local contrast)
       ...(S.gentle ? { sharpen: 0, clarity: 0.12, grain: Math.max(f.grain || 0, 0.04) } : {}) }, at: 0 });
     add({ id: 'motionblur', icon: '≫', group: 'Motion', title: 'Motion blur', desc: 'Blur only on the fast part of each speed ramp, so normal-speed shots stay sharp', look: { motionBlur: S.motionBlur || 0.4 }, at: 0 });
+    if (clips.length > 1) {
+      add({ id: 'colormatch', icon: '🎨', group: 'Look', title: 'Auto color-match clips', desc: 'Balances exposure, contrast and saturation across cuts so scenes flow together cleanly', mod: 'colormatch', at: 0 });
+    }
+    const whipTargets = clips.filter((c, i) => i > 0 && c.dur >= 0.35 && (c.level !== 'low' || S.matchCut)).slice(0, 8);
+    if (whipTargets.length) {
+      add({ id: 'whipcam', icon: '↪', group: 'Transitions', title: 'Whip-cam settle moves', desc: `Cubic whip-in settle + directional smear on ${plural(whipTargets.length, 'cut')}`, effects: whipTargets.map((c, i) => fx('whipcam', c.start, Math.min(0.45, c.dur * 0.65), { intensity: 0.85, direction: i % 2 ? 'left' : 'right' })), at: whipTargets[0].start });
+    }
+    const paraTargets = clips.filter((c) => c.hero || (c.role === 'hold' && c.dur >= 0.7)).slice(0, 4);
+    if (paraTargets.length) {
+      add({ id: 'parallax', icon: '◫', group: 'Depth', title: '2.5D character parallax', desc: `Foreground/background depth separation on ${plural(paraTargets.length, 'held shot')}`, effects: paraTargets.map((c) => fx('parallax', c.start, c.dur, { intensity: 0.9, bgBlur: 0.008, bgDark: 0.25 })), at: paraTargets[0].start });
+    }
+    const rimTargets = clips.filter((c) => c.role === 'climax' || c.role === 'reveal' || c.hero).slice(0, 4);
+    if (rimTargets.length) {
+      add({ id: 'rim', icon: '✦', group: 'Depth', title: 'Eye & rim glow sweep', desc: `Optical iris bloom and rim sweep on ${plural(rimTargets.length, 'hero moment')}`, effects: rimTargets.map((c) => fx('rim', c.start, Math.min(1.4, c.dur), { intensity: 0.8 })), at: rimTargets[0].start });
+    }
+    if (clips.length >= 2) {
+      const lastClip = clips[clips.length - 1];
+      const totalDur = lastClip ? lastClip.start + lastClip.dur : 0;
+      const duo = LOOKS[S.look] && LOOKS[S.look].duo;
+      const lutCol = duo ? '#' + duo.map((v) => Math.round(clamp(v, 0, 1) * 255).toString(16).padStart(2, '0')).join('') : '#ff6b3d';
+      const midStart = clips[Math.floor(clips.length / 2)].start;
+      add({ id: 'colorlut', icon: '◐', group: 'Look', title: 'Signature S-curve LUT', desc: 'Filmic shadow crush + highlight roll-off across main action', effects: [fx('colorlut', midStart, Math.max(1, totalDur * 0.4), { intensity: 0.75, color: lutCol })], at: midStart });
+    }
   }
 
   {
@@ -2260,6 +2341,7 @@ export function applySuggestion(project, s) {
   if (s.mod === 'velocity') { applyVelocity(project); if (auto.applied.includes('freeze')) applyFreeze(project); }
   if (s.mod === 'reframe') applyReframe(project);
   if (s.mod === 'freeze') applyFreeze(project);
+  if (s.mod === 'colormatch') autoColorMatch(project);
   if (s.mod === 'voice') { project.voice = deep(s.voice); applyVoice(project); }
   if (s.layout) {
     auto.saved['layout:' + s.id] = project.layout || 'fill';
@@ -2294,6 +2376,7 @@ export function removeSuggestion(project, s) {
   if (s.mod === 'freeze') removeFreeze(project);
   if (s.mod === 'velocity') { removeVelocity(project); if (auto.applied.includes('freeze')) applyFreeze(project); }
   if (s.mod === 'reframe') for (const c of project.clips) c.pan = null;
+  if (s.mod === 'colormatch') for (const c of project.clips) if (c.grade && c.grade._auto) delete c.grade;
   if (s.mod === 'voice') { delete project.voice; applyVoice(project); }
   if (s.layout) {
     if (project.layout === s.layout) project.layout = auto.saved['layout:' + s.id] || 'fill';
@@ -2323,7 +2406,50 @@ export function reapplyClipMods(project) {
   if (a.includes('velocity')) applyVelocity(project);
   if (a.includes('freeze')) applyFreeze(project);
   if (a.includes('reframe')) applyReframe(project);
+  if (a.includes('colormatch')) autoColorMatch(project);
   applyFocus(project);
+}
+
+/**
+ * Balances per-clip exposure, contrast, saturation, and warmth toward the project median
+ * so clips from bright daylight and dark night scenes harmonize cleanly without fighting the look.
+ */
+export function autoColorMatch(project) {
+  const clips = project && project.clips ? project.clips : [];
+  const stats = [];
+  for (const c of clips) {
+    const m = getMedia(project, c.mediaId);
+    if (!m) continue;
+    const g = m.analysis && m.analysis.grid;
+    const it = intelAt(m, c.srcIn + clipSpan(c) * 0.5);
+    let lum = g && g.pl ? gridMean(g, 'pl', c.srcIn, c.srcIn + Math.max(0.1, clipSpan(c))) : (it ? it.lumaMed : null);
+    let sat = g && g.ps ? gridMean(g, 'ps', c.srcIn, c.srcIn + Math.max(0.1, clipSpan(c))) : (it && it.chromaP90 != null ? it.chromaP90 * 0.65 : null);
+    let warm = it && Array.isArray(it.rgbMean) && it.rgbMean.length === 3 ? (it.rgbMean[0] - it.rgbMean[2]) : 0;
+    if (lum != null) stats.push({ c, lum, sat: sat ?? 0.35, warm });
+  }
+  if (stats.length < 2) return 0;
+  const med = (arr) => { const s = [...arr].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+  const refPool = stats.filter((x) => x.c.hero || x.c.role === 'reveal');
+  const pool = refPool.length ? refPool : stats;
+  const refLum = med(pool.map((x) => x.lum));
+  const refSat = med(pool.map((x) => x.sat));
+  const refWarm = med(pool.map((x) => x.warm));
+  let updated = 0;
+  for (const s of stats) {
+    const exp = clamp((refLum - s.lum) * 1.15, -0.35, 0.35);
+    const con = clamp(1 + (s.lum < 0.25 ? -0.05 : (refLum - s.lum) * 0.12), 0.88, 1.15);
+    const sat = clamp(refSat > 0.05 && s.sat > 0.05 ? refSat / s.sat : 1, 0.88, 1.15);
+    const temp = clamp((refWarm - s.warm) * 0.45, -0.2, 0.2);
+    s.c.grade = {
+      exposure: +exp.toFixed(3),
+      contrast: +con.toFixed(3),
+      saturation: +sat.toFixed(3),
+      temperature: +temp.toFixed(3),
+      _auto: true,
+    };
+    updated++;
+  }
+  return updated;
 }
 
 // Where the subject sits in each clip (source x, 0..1): zooms and light bursts aim there.

@@ -18,6 +18,7 @@ export class Timeline {
     this.wave = document.getElementById('tlWave');
     this.tracks = {
       fx: document.getElementById('trackFx'),
+      ovl: document.getElementById('trackOvl'),
       text: document.getElementById('trackText'),
       sfx: document.getElementById('trackSfx'),
       video: document.getElementById('trackVideo'),
@@ -41,7 +42,20 @@ export class Timeline {
       this.scroll.scrollLeft = tAt * this.pps - x;
     }, { passive: false });
 
-    this.ruler.addEventListener('pointerdown', (e) => this.scrub(e));
+    this.ruler.addEventListener('pointerdown', (e) => {
+      const issues = this.app.qaIssues || [];
+      if (issues.length) {
+        const rect = this.scroll.getBoundingClientRect();
+        const mx = e.clientX - rect.left + this.scroll.scrollLeft;
+        const hit = issues.find((q) => Number.isFinite(q.time) && Math.abs(q.time * this.pps - mx) <= 7);
+        if (hit) {
+          this.app.player.seek(hit.time);
+          if (this.app.openQA) this.app.openQA();
+          return;
+        }
+      }
+      this.scrub(e);
+    });
     for (const [k, el] of Object.entries(this.tracks)) {
       el.addEventListener('pointerdown', (e) => {
         if (e.target !== el && e.target !== this.wave) return;
@@ -123,6 +137,12 @@ export class Timeline {
       laneEnds[lane] = e.start + e.dur;
       const def = FX[e.type] || { label: e.type, color: '#888', icon: '?' };
       const el = this.item('fx-item' + (e.src && e.src !== 'manual' ? ' auto' : ''), e.start, e.dur, `${def.icon} ${def.label}`, sel && sel.kind === 'fx' && sel.id === e.id);
+      if (e.kf && Object.keys(e.kf).length) {
+        const dot = document.createElement('span');
+        dot.className = 'kf-dot';
+        dot.textContent = '◆';
+        el.appendChild(dot);
+      }
       el.style.top = 4 + lane * LANE_H + 'px';
       el.style.background = def.color;
       el.title = `${def.label} · ${fmtTime(e.start)} · ${e.dur.toFixed(2)}s`;
@@ -130,6 +150,19 @@ export class Timeline {
       fxEl.appendChild(el);
     }
     this.root.style.setProperty('--fx-h', Math.max(1, laneEnds.length) * LANE_H + 8 + 'px');
+
+    const ovEl = this.tracks.ovl;
+    if (ovEl) {
+      ovEl.innerHTML = '';
+      for (const ov of p.overlays || []) {
+        const m = getMedia(p, ov.mediaId);
+        const label = `▣ ${m ? m.name : 'overlay'}`;
+        const el = this.item('ovl-item', ov.start, ov.dur, label, sel && sel.kind === 'ovl' && sel.id === ov.id);
+        el.title = `${m ? m.name : 'overlay'} · ${ov.blend || 'screen'} · ${ov.dur.toFixed(2)}s`;
+        this.bindItem(el, 'ovl', ov);
+        ovEl.appendChild(el);
+      }
+    }
 
     const txEl = this.tracks.text;
     txEl.innerHTML = '';
@@ -175,6 +208,18 @@ export class Timeline {
         b.textContent = '⚡';
         el.appendChild(b);
       }
+      if (c.dur * this.pps > 28) {
+        const pills = [];
+        if ((c.kf && Object.keys(c.kf).length) || (c.speedKeys && c.speedKeys.some((k) => !Array.isArray(k)))) pills.push('◆');
+        if (m && m.masks && m.masks.frames && m.masks.frames.size) pills.push('🎭');
+        if (Array.isArray(c.alts) && c.alts.length) pills.push('⇄');
+        if (pills.length) {
+          const row = document.createElement('span');
+          row.className = 'clip-badges';
+          row.innerHTML = pills.map((s) => `<span class="clip-badge-pill">${s}</span>`).join('');
+          el.appendChild(row);
+        }
+      }
       el.title = `${m ? m.name : 'missing'} · src ${fmtTime(c.srcIn)} · ${c.dur.toFixed(2)}s`;
       this.bindItem(el, 'clip', c);
       vEl.appendChild(el);
@@ -199,7 +244,6 @@ export class Timeline {
       app.select({ kind, id: obj.id });
       // sounds keep their natural length, so dragging anywhere on them moves them
       const mode = kind === 'sfx' ? 'move' : e.target.classList.contains('l') ? 'l' : e.target.classList.contains('r') ? 'r' : 'move';
-      if (kind === 'clip' && mode === 'move') return;
       const startX = e.clientX;
       const orig = { start: obj.start, dur: obj.dur, srcIn: obj.srcIn };
       const targets = this.snapTargets(obj);
@@ -212,6 +256,22 @@ export class Timeline {
           pushed = true;
           if (obj.src && obj.src !== 'manual') obj.src = 'manual';
           if (obj.lyric) app.captionEdits = true;
+        }
+        if (kind === 'clip' && mode === 'move') {
+          const clips = app.project.clips;
+          const idx = clips.indexOf(obj);
+          const dragMid = orig.start + orig.dur / 2 + dx;
+          if (idx > 0 && dragMid < clips[idx - 1].start + clips[idx - 1].dur * 0.5) {
+            [clips[idx - 1], clips[idx]] = [clips[idx], clips[idx - 1]];
+            relayout(clips);
+          } else if (idx >= 0 && idx < clips.length - 1 && dragMid > clips[idx + 1].start + clips[idx + 1].dur * 0.5) {
+            [clips[idx], clips[idx + 1]] = [clips[idx + 1], clips[idx]];
+            relayout(clips);
+          } else {
+            return;
+          }
+          app.changed({ inspector: false });
+          return;
         }
         if (kind === 'clip') this.trimClip(obj, orig, mode, dx);
         else if (mode === 'move') {
@@ -312,6 +372,17 @@ export class Timeline {
         g.font = '10px Inter, sans-serif';
       }
     }
+    for (const q of this.app.qaIssues || []) {
+      if (!Number.isFinite(q.time)) continue;
+      const x = q.time * this.pps - sl;
+      if (x < -8 || x > w + 8) continue;
+      g.save();
+      g.translate(x, 7);
+      g.rotate(Math.PI / 4);
+      g.fillStyle = q.severity === 'err' ? '#f87171' : '#fbbf24';
+      g.fillRect(-3.5, -3.5, 7, 7);
+      g.restore();
+    }
 
     // music waveform
     const wc = this.wave;
@@ -366,7 +437,8 @@ function nearestThumb(m, t) {
 
 function speedLabel(c) {
   const k = c.speedKeys;
-  const min = Math.min(...k.map((x) => x[1])), max = Math.max(...k.map((x) => x[1]));
+  const vals = k.map((x) => (Array.isArray(x) ? x[1] : x.v));
+  const min = Math.min(...vals), max = Math.max(...vals);
   if (Math.abs(max - min) < 0.01) return `${(+min.toFixed(2))}×`;
   return `ramp ${min.toFixed(1)}–${max.toFixed(1)}×`;
 }
