@@ -537,7 +537,7 @@ void main() {
       float ld = luma(c1);
       vec3 mono = uLutCol / max(luma(uLutCol), 0.05) * ld;
       mono = mix(mono, mix(vec3(ld), mono, 0.35), smoothstep(0.55, 1.0, ld));
-      // (skin keeps half its own colour: at full strength a green month turned Reze's face sickly green)
+      // (skin keeps half its own colour so a strong green tint doesn't turn faces sickly green)
       float sk = skinW(rgb2hsv(clamp(c1, 0.0, 1.0)));
       c1 = mix(c1, clamp(mono, 0.0, 1.0), uLutDuo * (1.0 - 0.55 * sk));
     }

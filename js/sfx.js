@@ -7,7 +7,7 @@ const buffers = new Map();
 const pending = new Map();
 let previewNode = null;
 
-// The library is the Pepper pack plus the packs added later (catalog-new.json), merged.
+// Merge the base sound manifest (manifest.json) with any additional catalogs (catalog-new.json).
 export async function loadSfxManifest() {
   const all = { packs: [], sounds: [] };
   for (const url of ['sfx/manifest.json', 'sfx/catalog-new.json']) {
@@ -29,9 +29,8 @@ export async function loadSfxManifest() {
 // trailer-style hit. `peak` is where each is loudest (the riser and swell build to their very end,
 // a whoosh rushes past two thirds of the way through, the boom and the hit land at once).
 const MADE = 'Made in the editor';
-// (tuned against the designed whooshes of the VideoEditingSFX and MixClap packs, measured: those
-// peak about 40% of the way through and ring on for half a second after, sit dark, around 300 Hz,
-// with a good share of sub, and barely pan)
+// (tuned against designed transition whooshes: peaking around 40% of the way through and ringing
+// on for half a second after, sitting dark around 300 Hz with solid sub weight and subtle panning)
 const WHOOSHES = [
   // name, length, where it peaks (0..1), band sweep start → peak → end (Hz), pan direction, sub weight
   ['deep', 0.95, 0.4, 90, 620, 120, 1, 0.5],
